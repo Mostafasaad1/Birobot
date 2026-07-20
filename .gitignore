@@ -1,0 +1,11 @@
+**/__pycache__/
+.agents/
+.specify/
+specs/
+AGENTS.md
+build/
+log/
+install/
+.pytest_cache/
+.opencode/
+Media/
