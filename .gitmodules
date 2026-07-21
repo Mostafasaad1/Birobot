@@ -1,0 +1,4 @@
+[submodule "birobot_description/vendor/ur_description"]
+	path = birobot_description/vendor/ur_description
+	url = https://github.com/UniversalRobots/Universal_Robots_ROS2_Description
+	branch = humble
