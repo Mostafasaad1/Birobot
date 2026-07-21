@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<robot name="birobot" xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <!-- Include upstream UR macro -->
+  <xacro:include filename="$(find birobot_description)/vendor/ur_description/urdf/ur_macro.xacro"/>
+
+  <!-- Declare launch arguments / parameters -->
+  <xacro:arg name="arm1_x" default="-0.600"/>
+  <xacro:arg name="arm1_y" default="0.000"/>
+  <xacro:arg name="arm1_z" default="0.000"/>
+  <xacro:arg name="arm1_roll" default="0.000"/>
+  <xacro:arg name="arm1_pitch" default="0.000"/>
+  <xacro:arg name="arm1_yaw" default="0.000"/>
+
+  <xacro:arg name="arm2_x" default="0.600"/>
+  <xacro:arg name="arm2_y" default="0.000"/>
+  <xacro:arg name="arm2_z" default="0.000"/>
+  <xacro:arg name="arm2_roll" default="0.000"/>
+  <xacro:arg name="arm2_pitch" default="0.000"/>
+  <xacro:arg name="arm2_yaw" default="3.141592653589793"/>
+
+  <xacro:arg name="table_length" default="1.600"/>
+  <xacro:arg name="table_width" default="0.800"/>
+  <xacro:arg name="table_height" default="0.050"/>
+
+  <!-- Convert args to properties for evaluation -->
+  <xacro:property name="arm1_x" value="$(arg arm1_x)"/>
+  <xacro:property name="arm1_y" value="$(arg arm1_y)"/>
+  <xacro:property name="arm1_z" value="$(arg arm1_z)"/>
+  <xacro:property name="arm1_roll" value="$(arg arm1_roll)"/>
+  <xacro:property name="arm1_pitch" value="$(arg arm1_pitch)"/>
+  <xacro:property name="arm1_yaw" value="$(arg arm1_yaw)"/>
+
+  <xacro:property name="arm2_x" value="$(arg arm2_x)"/>
+  <xacro:property name="arm2_y" value="$(arg arm2_y)"/>
+  <xacro:property name="arm2_z" value="$(arg arm2_z)"/>
+  <xacro:property name="arm2_roll" value="$(arg arm2_roll)"/>
+  <xacro:property name="arm2_pitch" value="$(arg arm2_pitch)"/>
+  <xacro:property name="arm2_yaw" value="$(arg arm2_yaw)"/>
+
+  <xacro:property name="table_length" value="$(arg table_length)"/>
+  <xacro:property name="table_width" value="$(arg table_width)"/>
+  <xacro:property name="table_height" value="$(arg table_height)"/>
+
+  <!-- Compile-time inter-arm spacing guard -->
+  <xacro:property name="arm1_x_num" value="${float(arm1_x)}"/>
+  <xacro:property name="arm2_x_num" value="${float(arm2_x)}"/>
+  <xacro:property name="arm_spacing" value="${arm2_x_num - arm1_x_num if (arm2_x_num - arm1_x_num) &gt;= 0 else arm1_x_num - arm2_x_num}"/>
+  <xacro:if value="${arm_spacing &lt; 0.200}">
+    <xacro:ERROR_inter_arm_spacing_below_200mm_minimum_clearance/>
+  </xacro:if>
+
+  <!-- World link (root) -->
+  <link name="world"/>
+
+  <!-- Fixed joint connecting world to workcell_base_link -->
+  <joint name="world_to_workcell" type="fixed">
+    <parent link="world"/>
+    <child link="workcell_base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Workcell base link (table) -->
+  <link name="workcell_base_link">
+    <visual>
+      <origin xyz="0 0 -${table_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${table_length} ${table_width} ${table_height}"/>
+      </geometry>
+      <material name="workcell_table_material">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -${table_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${table_length} ${table_width} ${table_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Arm 1 instantiation -->
+  <xacro:ur_robot
+    name="arm1"
+    tf_prefix="arm1_"
+    parent="workcell_base_link"
+    ur_type="ur10e"
+    joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
+    kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
+    physical_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/physical_parameters.yaml"
+    visual_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/visual_parameters.yaml">
+    <origin xyz="${arm1_x} ${arm1_y} ${arm1_z}" rpy="${arm1_roll} ${arm1_pitch} ${arm1_yaw}"/>
+  </xacro:ur_robot>
+
+  <!-- Arm 2 instantiation -->
+  <xacro:ur_robot
+    name="arm2"
+    tf_prefix="arm2_"
+    parent="workcell_base_link"
+    ur_type="ur10e"
+    joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
+    kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
+    physical_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/physical_parameters.yaml"
+    visual_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/visual_parameters.yaml">
+    <origin xyz="${arm2_x} ${arm2_y} ${arm2_z}" rpy="${arm2_roll} ${arm2_pitch} ${arm2_yaw}"/>
+  </xacro:ur_robot>
+
+</robot>
