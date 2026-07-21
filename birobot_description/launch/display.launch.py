@@ -76,11 +76,15 @@ def launch_setup(context, *args, **kwargs):
         parameters=[robot_description],
     )
 
+    initial_positions_file = os.path.join(
+        pkg_share, 'config', 'initial_positions.yaml'
+    )
     jsp_gui_node = Node(
         package='joint_state_publisher_gui',
         executable='joint_state_publisher_gui',
         name='joint_state_publisher_gui',
         output='screen',
+        parameters=[initial_positions_file],
     )
 
     rviz_config_file = os.path.join(
