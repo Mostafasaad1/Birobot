@@ -1,4 +1,4 @@
-# Initial home positions for birobot dual UR10e arms
+# Initial home positions for birobot dual UR10e arms (upright standing position)
 joint_state_publisher_gui:
   ros__parameters:
     zeros:

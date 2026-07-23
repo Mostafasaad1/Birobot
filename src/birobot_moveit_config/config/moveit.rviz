@@ -17,8 +17,6 @@ Panels:
       Expanded:
         - /Current View1
       Splitter Ratio: 0.5
-  - Class: moveit_rviz_plugin/MotionPlanning
-    Name: Motion Planning
 Visualization Manager:
   Class: ""
   Displays:
@@ -49,7 +47,7 @@ Visualization Manager:
       Planning Request:
         Planning Group: dual_arms
         Query Goal State: true
-        Query Start State: true
+        Query Start State: false
   Global Options:
     Background Color: 48; 48; 48
     Fixed Frame: world

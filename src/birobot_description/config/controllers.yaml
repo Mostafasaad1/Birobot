@@ -1,6 +1,8 @@
 controller_manager:
   ros__parameters:
     update_rate: 125  # Hz
+    params_file:
+      - "/home/mox/projects/Birobot/install/birobot_description/share/birobot_description/config/controllers.yaml"
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

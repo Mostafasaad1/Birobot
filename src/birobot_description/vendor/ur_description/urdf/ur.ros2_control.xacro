@@ -28,12 +28,12 @@
     <ros2_control name="${name}" type="system">
       <hardware>
         <xacro:if value="${sim_gazebo}">
-          <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
         </xacro:if>
         <xacro:if value="${sim_ignition}">
-          <plugin>ign_ros2_control/IgnitionSystem</plugin>
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
         </xacro:if>
-        <xacro:if value="${use_fake_hardware}">
+        <xacro:if value="${use_fake_hardware and not (sim_gazebo or sim_ignition)}">
           <plugin>mock_components/GenericSystem</plugin>
           <param name="fake_sensor_commands">${fake_sensor_commands}</param>
           <param name="state_following_offset">0.0</param>

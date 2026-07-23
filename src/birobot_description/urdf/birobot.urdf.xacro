@@ -23,6 +23,14 @@
   <xacro:arg name="table_width" default="0.800"/>
   <xacro:arg name="table_height" default="0.050"/>
 
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="sim_gazebo" default="false"/>
+  <xacro:arg name="sim_ignition" default="false"/>
+
+  <xacro:property name="use_fake_hardware" value="$(arg use_fake_hardware)"/>
+  <xacro:property name="sim_gazebo" value="$(arg sim_gazebo)"/>
+  <xacro:property name="sim_ignition" value="$(arg sim_ignition)"/>
+
   <!-- Convert args to properties for evaluation -->
   <xacro:property name="arm1_x" value="$(arg arm1_x)"/>
   <xacro:property name="arm1_y" value="$(arg arm1_y)"/>
@@ -79,8 +87,8 @@
     </collision>
   </link>
 
-  <!-- Initial home positions property for UR10e arms -->
-  <xacro:property name="initial_positions_file" value="$(find ur_description)/config/initial_positions.yaml"/>
+  <!-- Initial home positions — load from vendored ur_description (shoulder_lift=-1.57, wrist_1=-1.57) -->
+  <xacro:property name="initial_positions_file" value="$(find birobot_description)/vendor/ur_description/config/initial_positions.yaml"/>
   <xacro:property name="initial_positions_dict" value="${xacro.load_yaml(initial_positions_file)}"/>
 
   <!-- Arm 1 instantiation -->
@@ -89,7 +97,9 @@
     tf_prefix="arm1_"
     parent="workcell_base_link"
     ur_type="ur10e"
-    use_fake_hardware="true"
+    use_fake_hardware="${use_fake_hardware}"
+    sim_gazebo="${sim_gazebo}"
+    sim_ignition="${sim_ignition}"
     initial_positions="${initial_positions_dict}"
     joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
     kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
@@ -104,7 +114,9 @@
     tf_prefix="arm2_"
     parent="workcell_base_link"
     ur_type="ur10e"
-    use_fake_hardware="true"
+    use_fake_hardware="${use_fake_hardware}"
+    sim_gazebo="${sim_gazebo}"
+    sim_ignition="${sim_ignition}"
     initial_positions="${initial_positions_dict}"
     joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
     kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
@@ -120,5 +132,16 @@
   <xacro:depth_camera name="depth_camera" parent="workcell_base_link">
     <origin xyz="0.0 0.0 1.200" rpy="0.0 1.57079632679 0.0"/>
   </xacro:depth_camera>
+
+  <!-- Gazebo Sim plugin for ros2_control -->
+  <xacro:if value="${sim_gazebo or sim_ignition}">
+    <xacro:property name="controllers_yaml_path" value="$(find birobot_description)/config/controllers.yaml"/>
+    <gazebo>
+      <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>${controllers_yaml_path}</parameters>
+        <controller_manager_name>controller_manager</controller_manager_name>
+      </plugin>
+    </gazebo>
+  </xacro:if>
 
 </robot>
