@@ -1,0 +1,61 @@
+Panels:
+  - Class: rviz_default_plugins/Displays
+    Name: Displays
+  - Class: rviz_default_plugins/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+      Cell Size: 1
+      Line Style:
+        Value: Lines
+      Normal Cell Count: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: world
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Value: true
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Raw Depth Cloud
+      Value: true
+      Topic:
+        Value: /birobot/depth_camera/points
+      Style: Points
+      Size (Pixels): 3
+      Color Transformer: AxisColor
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Filtered Objects Cloud
+      Value: true
+      Topic:
+        Value: /birobot/perception/object_cloud
+      Style: Flat Squares
+      Size (Pixels): 4
+      Color Transformer: FlatColor
+      Color: 255; 0; 0
+    - Class: rviz_default_plugins/PoseArray
+      Name: Target Poses
+      Value: true
+      Topic:
+        Value: /birobot/perception/target_poses
+      Color: 0; 255; 0
+      Arrow Length: 0.1
+  Global Options:
+    Fixed Frame: world
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.5
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.8
+      Pitch: 0.6
+      Yaw: 0.8

@@ -57,7 +57,7 @@
   <joint name="world_to_workcell" type="fixed">
     <parent link="world"/>
     <child link="workcell_base_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 ${table_height}" rpy="0 0 0"/>
   </joint>
 
   <!-- Workcell base link (table) -->
@@ -104,5 +104,13 @@
     visual_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/visual_parameters.yaml">
     <origin xyz="${arm2_x} ${arm2_y} ${arm2_z}" rpy="${arm2_roll} ${arm2_pitch} ${arm2_yaw}"/>
   </xacro:ur_robot>
+
+  <!-- Include 3D Depth Camera macro -->
+  <xacro:include filename="$(find birobot_description)/urdf/sensors/depth_camera.urdf.xacro"/>
+
+  <!-- Instantiate 3D Depth Camera looking down at table pick zone -->
+  <xacro:depth_camera name="depth_camera" parent="workcell_base_link">
+    <origin xyz="0.0 0.0 1.200" rpy="0.0 1.57079632679 0.0"/>
+  </xacro:depth_camera>
 
 </robot>
