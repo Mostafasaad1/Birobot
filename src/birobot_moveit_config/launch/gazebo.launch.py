@@ -184,51 +184,8 @@ def generate_launch_description():
         parameters=[robot_description, {'use_sim_time': True}],
     )
 
-    # ── Joint State Publisher (home-position primer) ──────────────────────────
-    # robot_state_publisher needs /joint_states to compute TF. In Gazebo mode
-    # the controller_manager lives INSIDE Gazebo, so there is no ros2_control_node
-    # to publish initial joint states. Without this, RSP shows the robot flat
-    # (all-zeros) for the entire Gazebo startup period (~5-10 s).
-    # We publish a latched /joint_states at the home position so RViz shows
-    # the correct upright posture immediately. Once joint_state_broadcaster
-    # comes online it will overwrite these values.
-    home_joint_names = [
-        'arm1_shoulder_pan_joint', 'arm1_shoulder_lift_joint', 'arm1_elbow_joint',
-        'arm1_wrist_1_joint', 'arm1_wrist_2_joint', 'arm1_wrist_3_joint',
-        'arm2_shoulder_pan_joint', 'arm2_shoulder_lift_joint', 'arm2_elbow_joint',
-        'arm2_wrist_1_joint', 'arm2_wrist_2_joint', 'arm2_wrist_3_joint',
-    ]
-    home_positions = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0,
-                      0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]
+    # (Removed static joint_state_publisher to prevent /joint_states conflicts with joint_state_broadcaster)
 
-    # Write JSP params to a YAML file — ROS 2 launch rejects empty lists ([])
-    # inline (they become an empty tuple () which fails type validation) and
-    # has trouble with inline nested dicts. File path is the safe pattern.
-    _jsp_yaml = {
-        'joint_state_publisher': {
-            'ros__parameters': {
-                'robot_description': robot_description_str,
-                'publish_default_positions': True,
-                'zeros': {
-                    name: float(pos)
-                    for name, pos in zip(home_joint_names, home_positions)
-                },
-            }
-        }
-    }
-    _jsp_tmp = tempfile.NamedTemporaryFile(
-        mode='w', suffix='.yaml', delete=False, prefix='birobot_jsp_'
-    )
-    yaml.dump(_jsp_yaml, _jsp_tmp)
-    _jsp_tmp.close()
-    jsp_params_file = _jsp_tmp.name
-
-    joint_state_publisher = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        output='screen',
-        parameters=[jsp_params_file, {'use_sim_time': True}],
-    )
 
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
@@ -317,7 +274,6 @@ def generate_launch_description():
         clock_bridge,
         spawn_entity,
         robot_state_publisher,
-        joint_state_publisher,   # primes RSP with home pose before controllers load
         load_jsb,
         load_arm_controllers,
         move_group_node,

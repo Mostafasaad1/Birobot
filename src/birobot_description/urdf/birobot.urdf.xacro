@@ -87,9 +87,8 @@
     </collision>
   </link>
 
-  <!-- Initial home positions — load from vendored ur_description (shoulder_lift=-1.57, wrist_1=-1.57) -->
-  <xacro:property name="initial_positions_file" value="$(find birobot_description)/vendor/ur_description/config/initial_positions.yaml"/>
-  <xacro:property name="initial_positions_dict" value="${xacro.load_yaml(initial_positions_file)}"/>
+  <!-- Initial positions: Override vendor defaults and spawn completely flat (0.0) -->
+  <xacro:property name="all_zeros_dict" value="${dict(shoulder_pan_joint=0.0,shoulder_lift_joint=0.0,elbow_joint=0.0,wrist_1_joint=0.0,wrist_2_joint=0.0,wrist_3_joint=0.0)}"/>
 
   <!-- Arm 1 instantiation -->
   <xacro:ur_robot
@@ -100,7 +99,7 @@
     use_fake_hardware="${use_fake_hardware}"
     sim_gazebo="${sim_gazebo}"
     sim_ignition="${sim_ignition}"
-    initial_positions="${initial_positions_dict}"
+    initial_positions="${all_zeros_dict}"
     joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
     kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
     physical_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/physical_parameters.yaml"
@@ -117,7 +116,7 @@
     use_fake_hardware="${use_fake_hardware}"
     sim_gazebo="${sim_gazebo}"
     sim_ignition="${sim_ignition}"
-    initial_positions="${initial_positions_dict}"
+    initial_positions="${all_zeros_dict}"
     joint_limits_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/joint_limits.yaml"
     kinematics_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/default_kinematics.yaml"
     physical_parameters_file="$(find birobot_description)/vendor/ur_description/config/ur10e/physical_parameters.yaml"
