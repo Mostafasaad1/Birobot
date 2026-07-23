@@ -66,20 +66,7 @@
           </noise>
         </camera>
 
-        <plugin name="${name}_driver" filename="libgazebo_ros_camera.so">
-          <ros>
-            <namespace>/birobot</namespace>
-            <remapping>depth_camera/image_raw:=depth_camera/image_raw</remapping>
-            <remapping>depth_camera/image_depth:=depth_camera/depth_image</remapping>
-            <remapping>depth_camera/camera_info:=depth_camera/camera_info</remapping>
-            <remapping>depth_camera/points:=depth_camera/points</remapping>
-          </ros>
-          <camera_name>depth_camera</camera_name>
-          <frame_name>${name}_optical_frame</frame_name>
-          <hack_baseline>0.07</hack_baseline>
-          <min_depth>0.1</min_depth>
-          <max_depth>5.0</max_depth>
-        </plugin>
+
       </sensor>
     </gazebo>
 

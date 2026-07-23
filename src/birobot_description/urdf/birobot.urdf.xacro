@@ -133,13 +133,18 @@
     <origin xyz="0.0 0.0 1.200" rpy="0.0 1.57079632679 0.0"/>
   </xacro:depth_camera>
 
-  <!-- Gazebo Sim plugin for ros2_control -->
+  <!-- gz_ros2_control plugin. Use only 'parameters' tag - no ros/argument tags. -->
   <xacro:if value="${sim_gazebo or sim_ignition}">
-    <xacro:property name="controllers_yaml_path" value="$(find birobot_description)/config/controllers.yaml"/>
+    <xacro:arg name="controllers_yaml" default="$(find birobot_description)/config/controllers.yaml"/>
+    <xacro:property name="controllers_yaml_path" value="$(arg controllers_yaml)"/>
     <gazebo>
       <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
         <parameters>${controllers_yaml_path}</parameters>
         <controller_manager_name>controller_manager</controller_manager_name>
+        <ros>
+          <argument>--params-file</argument>
+          <argument>${controllers_yaml_path}</argument>
+        </ros>
       </plugin>
     </gazebo>
   </xacro:if>

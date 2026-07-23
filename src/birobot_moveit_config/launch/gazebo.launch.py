@@ -56,10 +56,24 @@ def generate_launch_description():
     # AND Gazebo spawn. Using two different xacro invocations (e.g. via
     # subprocess with different args) causes RSP and Gazebo to have divergent
     # robot models, which is the root cause of the Gazebo↔RViz pose mismatch.
+    original_controllers_yaml_path = os.path.join(
+        birobot_description_share, 'config', 'controllers.yaml'
+    )
+    # WORKAROUND for ROS 2 Jazzy controller_manager bug: 
+    # controller_manager copies node arguments to controllers, but blindly drops any argument 
+    # containing the substring "robot_description". We copy the yaml to /tmp to avoid the substring.
+    controllers_yaml_path = '/tmp/birobot_controllers.yaml'
+    import shutil
+    shutil.copy(original_controllers_yaml_path, controllers_yaml_path)
+
     xacro_file = os.path.join(birobot_description_share, 'urdf', 'birobot.urdf.xacro')
     doc = xacro.process_file(
         xacro_file,
-        mappings={'sim_ignition': 'true', 'use_fake_hardware': 'false'}
+        mappings={
+            'sim_ignition': 'true',
+            'use_fake_hardware': 'false',
+            'controllers_yaml': controllers_yaml_path,
+        }
     )
     robot_description_str = doc.toxml()
     robot_description = {'robot_description': robot_description_str}
@@ -73,9 +87,6 @@ def generate_launch_description():
     urdf_spawn_file = _urdf_tmp.name
 
     # Merged YAML params for ros2_control_node
-    controllers_yaml_path = os.path.join(
-        birobot_description_share, 'config', 'controllers.yaml'
-    )
     with open(controllers_yaml_path, 'r') as f:
         controllers_config = yaml.safe_load(f)
 
@@ -170,7 +181,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        parameters=[robot_description],
+        parameters=[robot_description, {'use_sim_time': True}],
     )
 
     # ── Joint State Publisher (home-position primer) ──────────────────────────
@@ -216,11 +227,7 @@ def generate_launch_description():
         package='joint_state_publisher',
         executable='joint_state_publisher',
         output='screen',
-        parameters=[jsp_params_file],
-    )
-
-    controllers_yaml_path = os.path.join(
-        birobot_description_share, 'config', 'controllers.yaml'
+        parameters=[jsp_params_file, {'use_sim_time': True}],
     )
 
     joint_state_broadcaster_spawner = Node(
@@ -229,7 +236,6 @@ def generate_launch_description():
         arguments=[
             'joint_state_broadcaster',
             '--controller-manager', '/controller_manager',
-            '--param-file', controllers_yaml_path,
         ],
         output='screen',
     )
@@ -240,7 +246,6 @@ def generate_launch_description():
         arguments=[
             'arm1_joint_trajectory_controller',
             '--controller-manager', '/controller_manager',
-            '--param-file', controllers_yaml_path,
         ],
         output='screen',
     )
@@ -251,7 +256,6 @@ def generate_launch_description():
         arguments=[
             'arm2_joint_trajectory_controller',
             '--controller-manager', '/controller_manager',
-            '--param-file', controllers_yaml_path,
         ],
         output='screen',
     )
@@ -290,6 +294,7 @@ def generate_launch_description():
             trajectory_execution,
             moveit_controllers_yaml,
             {'publish_robot_description_semantic': True},
+            {'use_sim_time': True},
         ],
     )
 
@@ -302,6 +307,7 @@ def generate_launch_description():
             robot_description,
             robot_description_semantic,
             robot_description_kinematics,
+            {'use_sim_time': True},
         ],
     )
 
