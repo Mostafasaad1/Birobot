@@ -15,13 +15,16 @@
 """Launch Gazebo simulation workcell with 3D depth camera and table objects."""
 
 import os
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
 import xacro
 
 
@@ -67,7 +70,7 @@ def launch_setup(context, *args, **kwargs):
         name='spawn_test_object_1',
         arguments=[
             '-entity', 'irregular_object_1',
-            '-xml', '''<sdf version="1.6">
+            '-xml', """<sdf version="1.6">
               <model name="irregular_object_1">
                 <pose>0.10 0.05 0.85 0 0 0.4</pose>
                 <link name="link">
@@ -84,7 +87,7 @@ def launch_setup(context, *args, **kwargs):
                   </collision>
                 </link>
               </model>
-            </sdf>''',
+            </sdf>""",
         ],
         output='screen',
         condition=IfCondition(spawn_objects),
@@ -97,7 +100,7 @@ def launch_setup(context, *args, **kwargs):
         name='spawn_test_object_2',
         arguments=[
             '-entity', 'irregular_object_2',
-            '-xml', '''<sdf version="1.6">
+            '-xml', """<sdf version="1.6">
               <model name="irregular_object_2">
                 <pose>-0.15 -0.10 0.85 0 0 -0.8</pose>
                 <link name="link">
@@ -114,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
                   </collision>
                 </link>
               </model>
-            </sdf>''',
+            </sdf>""",
         ],
         output='screen',
         condition=IfCondition(spawn_objects),
