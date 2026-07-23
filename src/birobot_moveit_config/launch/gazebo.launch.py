@@ -91,7 +91,10 @@ def generate_launch_description():
         controllers_config = yaml.safe_load(f)
 
     merged_ros2ctrl_params = {
-        '/**': {'ros__parameters': {'robot_description': robot_description_str}},
+        '/**': {'ros__parameters': {
+            'robot_description': robot_description_str,
+            'use_sim_time': True,
+        }},
     }
     if controllers_config:
         merged_ros2ctrl_params.update(controllers_config)
@@ -165,6 +168,10 @@ def generate_launch_description():
             '-name', 'birobot',
             '-world', 'empty',
             '-allow_renaming', 'true',
+            '-J', 'arm1_shoulder_lift_joint', '-1.5708',
+            '-J', 'arm1_wrist_1_joint', '-1.5708',
+            '-J', 'arm2_shoulder_lift_joint', '-1.5708',
+            '-J', 'arm2_wrist_1_joint', '-1.5708',
         ],
         output='screen',
     )

@@ -22,31 +22,31 @@
     <!--GROUP STATES: Default named joint poses-->
     <group_state name="home" group="arm_1">
         <joint name="arm1_elbow_joint" value="0"/>
-        <joint name="arm1_shoulder_lift_joint" value="0"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.5708"/>
         <joint name="arm1_shoulder_pan_joint" value="0"/>
-        <joint name="arm1_wrist_1_joint" value="0"/>
+        <joint name="arm1_wrist_1_joint" value="-1.5708"/>
         <joint name="arm1_wrist_2_joint" value="0"/>
         <joint name="arm1_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="home" group="arm_2">
         <joint name="arm2_elbow_joint" value="0"/>
-        <joint name="arm2_shoulder_lift_joint" value="0"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.5708"/>
         <joint name="arm2_shoulder_pan_joint" value="0"/>
-        <joint name="arm2_wrist_1_joint" value="0"/>
+        <joint name="arm2_wrist_1_joint" value="-1.5708"/>
         <joint name="arm2_wrist_2_joint" value="0"/>
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="home" group="dual_arms">
         <joint name="arm1_elbow_joint" value="0"/>
-        <joint name="arm1_shoulder_lift_joint" value="0"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.5708"/>
         <joint name="arm1_shoulder_pan_joint" value="0"/>
-        <joint name="arm1_wrist_1_joint" value="0"/>
+        <joint name="arm1_wrist_1_joint" value="-1.5708"/>
         <joint name="arm1_wrist_2_joint" value="0"/>
         <joint name="arm1_wrist_3_joint" value="0"/>
         <joint name="arm2_elbow_joint" value="0"/>
-        <joint name="arm2_shoulder_lift_joint" value="0"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.5708"/>
         <joint name="arm2_shoulder_pan_joint" value="0"/>
-        <joint name="arm2_wrist_1_joint" value="0"/>
+        <joint name="arm2_wrist_1_joint" value="-1.5708"/>
         <joint name="arm2_wrist_2_joint" value="0"/>
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
