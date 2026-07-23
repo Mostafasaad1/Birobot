@@ -123,7 +123,50 @@ def launch_setup(context, *args, **kwargs):
         condition=IfCondition(spawn_objects),
     )
 
-    return [rsp_node, gazebo, spawn_robot, spawn_object_1, spawn_object_2]
+    # Controller spawners
+    joint_state_broadcaster_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'joint_state_broadcaster',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+    )
+
+    arm1_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm1_joint_trajectory_controller',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+    )
+
+    arm2_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm2_joint_trajectory_controller',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+    )
+
+    return [
+        rsp_node,
+        gazebo,
+        spawn_robot,
+        spawn_object_1,
+        spawn_object_2,
+        joint_state_broadcaster_spawner,
+        arm1_controller_spawner,
+        arm2_controller_spawner,
+    ]
 
 
 def generate_launch_description():

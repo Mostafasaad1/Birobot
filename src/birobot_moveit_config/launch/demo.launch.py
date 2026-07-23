@@ -58,6 +58,13 @@ def generate_launch_description():
         'default_planning_pipeline': 'ompl',
     }
 
+    # 7. MoveIt controllers configuration
+    moveit_controllers_yaml = load_yaml('birobot_moveit_config', 'config/moveit_controllers.yaml')
+    moveit_controllers = moveit_controllers_yaml if moveit_controllers_yaml else {}
+    trajectory_execution = {
+        'moveit_controller_manager': 'moveit_simple_controller_manager/MoveItSimpleControllerManager',
+    }
+
     # RViz config path
     rviz_config_file = os.path.join(
         get_package_share_directory('birobot_moveit_config'), 'config', 'moveit.rviz'
@@ -89,6 +96,8 @@ def generate_launch_description():
             robot_description_planning,
             planning_pipelines,
             ompl_planning,
+            trajectory_execution,
+            moveit_controllers,
             {'publish_robot_description_semantic': True},
         ],
     )
