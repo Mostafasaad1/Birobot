@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This does not replace URDF, and is not an extension of URDF.
+    This is a format for data used mostly by MoveIt-->
+<robot name="birobot">
+    <!--GROUPS: Representation of a set of joints and links.-->
+    <!--Group arm_1: Kinematic chain for Left Arm-->
+    <group name="arm_1">
+        <chain base_link="arm1_base_link" tip_link="arm1_tool0"/>
+    </group>
+
+    <!--Group arm_2: Kinematic chain for Right Arm-->
+    <group name="arm_2">
+        <chain base_link="arm2_base_link" tip_link="arm2_tool0"/>
+    </group>
+
+    <!--Group dual_arms: Subgroup composition of arm_1 and arm_2-->
+    <group name="dual_arms">
+        <group name="arm_1"/>
+        <group name="arm_2"/>
+    </group>
+
+    <!--GROUP STATES: Default named joint poses-->
+    <group_state name="home" group="arm_1">
+        <joint name="arm1_elbow_joint" value="0"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.5708"/>
+        <joint name="arm1_shoulder_pan_joint" value="0"/>
+        <joint name="arm1_wrist_1_joint" value="-1.5708"/>
+        <joint name="arm1_wrist_2_joint" value="0"/>
+        <joint name="arm1_wrist_3_joint" value="0"/>
+    </group_state>
+    <group_state name="home" group="arm_2">
+        <joint name="arm2_elbow_joint" value="0"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.5708"/>
+        <joint name="arm2_shoulder_pan_joint" value="0"/>
+        <joint name="arm2_wrist_1_joint" value="-1.5708"/>
+        <joint name="arm2_wrist_2_joint" value="0"/>
+        <joint name="arm2_wrist_3_joint" value="0"/>
+    </group_state>
+    <group_state name="home" group="dual_arms">
+        <joint name="arm1_elbow_joint" value="0"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.5708"/>
+        <joint name="arm1_shoulder_pan_joint" value="0"/>
+        <joint name="arm1_wrist_1_joint" value="-1.5708"/>
+        <joint name="arm1_wrist_2_joint" value="0"/>
+        <joint name="arm1_wrist_3_joint" value="0"/>
+        <joint name="arm2_elbow_joint" value="0"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.5708"/>
+        <joint name="arm2_shoulder_pan_joint" value="0"/>
+        <joint name="arm2_wrist_1_joint" value="-1.5708"/>
+        <joint name="arm2_wrist_2_joint" value="0"/>
+        <joint name="arm2_wrist_3_joint" value="0"/>
+    </group_state>
+
+    <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
+    <end_effector name="arm1_ee" parent_link="arm1_tool0" group="arm_1"/>
+    <end_effector name="arm2_ee" parent_link="arm2_tool0" group="arm_2"/>
+
+    <!--VIRTUAL JOINT: Purpose: this element defines a virtual joint between a robot link and an external frame of reference (written trace because it has no child link)-->
+    <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="workcell_base_link"/>
+
+    <!--DISABLE COLLISIONS: By default it is assumed that any two links of the robot could potentially come into collision. The tags below disable collision checking between specified pairs of links. -->
+    <!-- Workcell Base to Arm Bases and Shoulders -->
+    <disable_collisions link1="workcell_base_link" link2="arm1_base_link" reason="Adjacent"/>
+    <disable_collisions link1="workcell_base_link" link2="arm1_base_link_inertia" reason="Default"/>
+    <disable_collisions link1="workcell_base_link" link2="arm1_shoulder_link" reason="Never"/>
+    <disable_collisions link1="workcell_base_link" link2="arm2_base_link" reason="Adjacent"/>
+    <disable_collisions link1="workcell_base_link" link2="arm2_base_link_inertia" reason="Default"/>
+    <disable_collisions link1="workcell_base_link" link2="arm2_shoulder_link" reason="Never"/>
+
+    <!-- Arm 1 Internal Link Pairs (Adjacent & Default/Never) -->
+    <disable_collisions link1="arm1_base_link" link2="arm1_base_link_inertia" reason="Adjacent"/>
+    <disable_collisions link1="arm1_base_link" link2="arm1_shoulder_link" reason="Never"/>
+    <disable_collisions link1="arm1_base_link_inertia" link2="arm1_shoulder_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_shoulder_link" link2="arm1_upper_arm_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_upper_arm_link" link2="arm1_forearm_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_forearm_link" link2="arm1_wrist_1_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm1_wrist_2_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm1_wrist_3_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm1_flange" reason="Adjacent"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm1_tool0" reason="Adjacent"/>
+    <disable_collisions link1="arm1_flange" link2="arm1_tool0" reason="Adjacent"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm1_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm1_flange" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm1_tool0" reason="Never"/>
+
+    <!-- Arm 2 Internal Link Pairs (Adjacent & Default/Never) -->
+    <disable_collisions link1="arm2_base_link" link2="arm2_base_link_inertia" reason="Adjacent"/>
+    <disable_collisions link1="arm2_base_link" link2="arm2_shoulder_link" reason="Never"/>
+    <disable_collisions link1="arm2_base_link_inertia" link2="arm2_shoulder_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_shoulder_link" link2="arm2_upper_arm_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_upper_arm_link" link2="arm2_forearm_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_forearm_link" link2="arm2_wrist_1_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_forearm_link" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm2_wrist_1_link" link2="arm2_wrist_2_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_wrist_2_link" link2="arm2_wrist_3_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_wrist_3_link" link2="arm2_flange" reason="Adjacent"/>
+    <disable_collisions link1="arm2_wrist_3_link" link2="arm2_tool0" reason="Adjacent"/>
+    <disable_collisions link1="arm2_flange" link2="arm2_tool0" reason="Adjacent"/>
+    <disable_collisions link1="arm2_wrist_1_link" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm2_wrist_1_link" link2="arm2_flange" reason="Never"/>
+    <disable_collisions link1="arm2_wrist_1_link" link2="arm2_tool0" reason="Never"/>
+
+    <!-- Inter-Arm Base Pairs (Fixed 1.2m distance - Never in Collision) -->
+    <disable_collisions link1="arm1_base_link" link2="arm2_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_base_link" link2="arm2_base_link_inertia" reason="Never"/>
+    <disable_collisions link1="arm1_base_link" link2="arm2_shoulder_link" reason="Never"/>
+    <disable_collisions link1="arm1_base_link_inertia" link2="arm2_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_base_link_inertia" link2="arm2_base_link_inertia" reason="Never"/>
+    <disable_collisions link1="arm1_base_link_inertia" link2="arm2_shoulder_link" reason="Never"/>
+    <disable_collisions link1="arm1_shoulder_link" link2="arm2_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_shoulder_link" link2="arm2_base_link_inertia" reason="Never"/>
+    <disable_collisions link1="arm1_shoulder_link" link2="arm2_shoulder_link" reason="Never"/>
+</robot>
