@@ -237,13 +237,6 @@ def generate_launch_description():
         )
     )
 
-    load_arm_controllers = RegisterEventHandler(
-        OnProcessExit(
-            target_action=joint_state_broadcaster_spawner,
-            on_exit=[arm1_trajectory_spawner, arm2_trajectory_spawner],
-        )
-    )
-
     move_group_node = Node(
         package='moveit_ros_move_group',
         executable='move_group',
@@ -275,6 +268,13 @@ def generate_launch_description():
         ],
     )
 
+    load_arm_controllers_and_moveit = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[arm1_trajectory_spawner, arm2_trajectory_spawner, move_group_node, rviz_node],
+        )
+    )
+
     return LaunchDescription([
         set_gz_resource_path,
         gazebo_sim,
@@ -282,7 +282,5 @@ def generate_launch_description():
         spawn_entity,
         robot_state_publisher,
         load_jsb,
-        load_arm_controllers,
-        move_group_node,
-        rviz_node,
+        load_arm_controllers_and_moveit,
     ])
