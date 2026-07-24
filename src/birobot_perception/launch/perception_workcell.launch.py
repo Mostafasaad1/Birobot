@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Launch Gazebo Sim workcell with 3D depth camera, table objects, and RViz2 (ROS 2 Jazzy)."""
+"""Unified System Launch: Gazebo Sim Workcell + 3D Perception Node + RViz2 (ROS 2 Jazzy)."""
 
 import os
 import tempfile
@@ -30,26 +30,28 @@ import xacro
 
 
 def launch_setup(context, *args, **kwargs):
-    """Set up nodes with context-evaluated launch arguments."""
+    """Set up all nodes and simulation components."""
     spawn_objects = LaunchConfiguration('spawn_objects')
     use_rviz = LaunchConfiguration('use_rviz')
+    launch_perception = LaunchConfiguration('launch_perception')
 
-    pkg_share = FindPackageShare('birobot_description').find('birobot_description')
-    
+    pkg_description_share = FindPackageShare('birobot_description').find('birobot_description')
+    pkg_perception_share = FindPackageShare('birobot_perception').find('birobot_perception')
+
     # Environment variable for Gazebo Sim meshes
-    vendor_dir = os.path.join(pkg_share, 'vendor')
+    vendor_dir = os.path.join(pkg_description_share, 'vendor')
     set_gz_resource_path = SetEnvironmentVariable(
         name='GZ_SIM_RESOURCE_PATH',
         value=f"{vendor_dir}:{os.environ.get('GZ_SIM_RESOURCE_PATH', '')}"
     )
 
     controllers_yaml_path = '/tmp/birobot_controllers.yaml'
-    original_controllers = os.path.join(pkg_share, 'config', 'controllers.yaml')
+    original_controllers = os.path.join(pkg_description_share, 'config', 'controllers.yaml')
     if os.path.exists(original_controllers):
         import shutil
         shutil.copy(original_controllers, controllers_yaml_path)
 
-    xacro_file = os.path.join(pkg_share, 'urdf', 'birobot.urdf.xacro')
+    xacro_file = os.path.join(pkg_description_share, 'urdf', 'birobot.urdf.xacro')
 
     doc = xacro.process_file(
         xacro_file,
@@ -64,12 +66,13 @@ def launch_setup(context, *args, **kwargs):
 
     # Save processed URDF to tempfile for ros_gz_sim create executable
     _urdf_tmp = tempfile.NamedTemporaryFile(
-        mode='w', suffix='.urdf', delete=False, prefix='birobot_workcell_'
+        mode='w', suffix='.urdf', delete=False, prefix='birobot_system_'
     )
     _urdf_tmp.write(robot_description_str)
     _urdf_tmp.close()
     urdf_file = _urdf_tmp.name
 
+    # 1. Robot State Publisher
     rsp_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -78,7 +81,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[robot_description, {'use_sim_time': True}],
     )
 
-    # Gazebo Sim (ros_gz_sim)
+    # 2. Gazebo Sim
     pkg_ros_gz_sim = FindPackageShare('ros_gz_sim').find('ros_gz_sim')
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -87,7 +90,7 @@ def launch_setup(context, *args, **kwargs):
         launch_arguments={'gz_args': '-r empty.sdf'}.items(),
     )
 
-    # Clock & PointCloud Bridges
+    # 3. Clock & PointCloud Bridges
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -100,7 +103,7 @@ def launch_setup(context, *args, **kwargs):
         output='screen'
     )
 
-    # Spawn birobot model into Gazebo Sim
+    # 4. Spawn Birobot Model into Gazebo Sim
     spawn_robot = Node(
         package='ros_gz_sim',
         executable='create',
@@ -117,7 +120,7 @@ def launch_setup(context, *args, **kwargs):
         output='screen',
     )
 
-    # Spawn test object 1 (Irregular object 1) on table surface (top of table is at z = 0.05m)
+    # 5. Spawn Object 1 (Red irregular box resting on table surface z = 0.08)
     obj1_sdf = """<sdf version="1.6">
       <model name="irregular_object_1">
         <pose>0 0 0 0 0 0</pose>
@@ -156,7 +159,7 @@ def launch_setup(context, *args, **kwargs):
         condition=IfCondition(spawn_objects),
     )
 
-    # Spawn test object 2 (Irregular object 2) on table surface
+    # 6. Spawn Object 2 (Blue irregular box resting on table surface z = 0.075)
     obj2_sdf = """<sdf version="1.6">
       <model name="irregular_object_2">
         <pose>0 0 0 0 0 0</pose>
@@ -195,50 +198,41 @@ def launch_setup(context, *args, **kwargs):
         condition=IfCondition(spawn_objects),
     )
 
-    # Controller spawners
+    # 7. Controller Spawners
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=[
-            'joint_state_broadcaster',
-            '--controller-manager',
-            '/controller_manager',
-        ],
+        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
         output='screen',
     )
 
     arm1_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=[
-            'arm1_joint_trajectory_controller',
-            '--controller-manager',
-            '/controller_manager',
-        ],
+        arguments=['arm1_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
         output='screen',
     )
 
     arm2_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=[
-            'arm2_joint_trajectory_controller',
-            '--controller-manager',
-            '/controller_manager',
-        ],
+        arguments=['arm2_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
         output='screen',
     )
 
-    # RViz2 visualization node
-    try:
-        perception_share = FindPackageShare('birobot_perception').find('birobot_perception')
-        rviz_config_file = os.path.join(perception_share, 'config', 'perception.rviz')
-    except Exception:
-        rviz_config_file = ''
+    # 8. Perception Managed Lifecycle Node
+    params_file = os.path.join(pkg_perception_share, 'config', 'perception_params.yaml')
+    perception_node = Node(
+        package='birobot_perception',
+        executable='birobot_perception_node',
+        name='birobot_perception_node',
+        output='screen',
+        parameters=[params_file],
+        condition=IfCondition(launch_perception),
+    )
 
-    if not rviz_config_file or not os.path.exists(rviz_config_file):
-        rviz_config_file = os.path.join(pkg_share, 'config', 'rviz', 'birobot.rviz')
-
+    # 9. RViz2 Visualization
+    rviz_config_file = os.path.join(pkg_perception_share, 'config', 'perception.rviz')
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -260,12 +254,13 @@ def launch_setup(context, *args, **kwargs):
         joint_state_broadcaster_spawner,
         arm1_controller_spawner,
         arm2_controller_spawner,
+        perception_node,
         rviz_node,
     ]
 
 
 def generate_launch_description():
-    """Generate launch description for Gazebo Sim workcell."""
+    """Generate launch description for full Birobot system."""
     declared_arguments = [
         DeclareLaunchArgument(
             'spawn_objects',
@@ -275,7 +270,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_rviz',
             default_value='true',
-            description='Launch RViz2 visualization automatically with workcell',
+            description='Launch RViz2 visualization automatically',
+        ),
+        DeclareLaunchArgument(
+            'launch_perception',
+            default_value='true',
+            description='Launch 3D perception lifecycle node automatically',
         ),
     ]
 

@@ -43,11 +43,12 @@
 
     <link name="${name}_optical_frame"/>
 
-    <!-- Gazebo sensor definition -->
+    <!-- Gazebo sensor definition for Gazebo Sim (gz-sim) -->
     <gazebo reference="${name}_link">
       <sensor type="depth" name="${name}_sensor">
         <always_on>true</always_on>
         <update_rate>15.0</update_rate>
+        <topic>/birobot/depth_camera/points</topic>
         <camera name="${name}">
           <horizontal_fov>1.2</horizontal_fov>
           <image>
@@ -65,8 +66,6 @@
             <stddev>0.003</stddev>
           </noise>
         </camera>
-
-
       </sensor>
     </gazebo>
 
