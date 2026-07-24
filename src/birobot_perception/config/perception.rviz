@@ -385,7 +385,10 @@ Visualization Manager:
     Fixed Frame: world
     Frame Rate: 30
   Name: root
-  Tools: ~
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/FocusCamera
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -393,7 +396,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.5
+      Distance: 3.4719998836517334
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -408,10 +411,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6000000238418579
+      Pitch: 0.5800000429153442
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0.800000011920929
+      Yaw: 0.6100001931190491
     Saved: ~
 Window Geometry:
   Displays:
@@ -419,9 +422,9 @@ Window Geometry:
   Height: 1008
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001ac0000037dfc0200000001fc0000004c0000037d0000011b0100001dfa000000010100000002fb0000000a005600690065007700730100000000ffffffff0000011001000003fb000000100044006900730070006c0061007900730100000000000001ad0000016a01000003000005d30000037d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000001ac0000037dfc0200000001fc0000004c0000037d0000011b0100001dfa000000010100000002fb0000000a005600690065007700730100000000ffffffff0000011001000003fb000000100044006900730070006c0061007900730100000000000001ad0000016a01000003000002130000037d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Views:
     collapsed: false
-  Width: 1920
+  Width: 960
   X: 0
   Y: 0
