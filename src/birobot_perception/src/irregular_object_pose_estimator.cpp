@@ -9,7 +9,10 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/filter.h>
 #include <pcl/common/centroid.h>
+
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -42,7 +45,7 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   max_cluster_size_ = declare_parameter<int>("max_cluster_size", 25000);
   max_tracked_objects_ = declare_parameter<int>("max_tracked_objects", 2);
   diagnostic_rate_hz_ = declare_parameter<double>("diagnostic_rate_hz", 1.0);
-  min_valid_points_ = declare_parameter<int>("min_valid_points", 1000);
+  min_valid_points_ = declare_parameter<int>("min_valid_points", 100);
 
   // Initialize publishers
   pub_diagnostics_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
@@ -50,6 +53,8 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   pub_target_poses_ = create_publisher<geometry_msgs::msg::PoseArray>("/birobot/perception/target_poses", 10);
 
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   RCLCPP_INFO(get_logger(), "Configuration successful.");
   return CallbackReturn::SUCCESS;
@@ -102,6 +107,8 @@ IrregularObjectPoseEstimator::on_cleanup(const rclcpp_lifecycle::State & /*state
   pub_object_cloud_.reset();
   pub_target_poses_.reset();
   tf_broadcaster_.reset();
+  tf_listener_.reset();
+  tf_buffer_.reset();
 
   return CallbackReturn::SUCCESS;
 }
@@ -258,21 +265,48 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud(new pcl::PointCloud<pcl::PointXYZ>);
   pcl::fromROSMsg(*msg, *input_cloud);
 
-  if (static_cast<int>(input_cloud->size()) < min_valid_points_) {
+  // Filter out NaN / Inf points from camera stream
+  pcl::PointCloud<pcl::PointXYZ>::Ptr clean_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  std::vector<int> nan_indices;
+  pcl::removeNaNFromPointCloud(*input_cloud, *clean_cloud, nan_indices);
+
+  RCLCPP_INFO_THROTTLE(
+    get_logger(), *get_clock(), 2000,
+    "Pointcloud received: raw=%zu, clean=%zu, min_thresh=%d",
+    input_cloud->size(), clean_cloud->size(), min_valid_points_);
+
+  if (static_cast<int>(clean_cloud->size()) < min_valid_points_) {
     RCLCPP_WARN_THROTTLE(
       get_logger(), *get_clock(), 5000,
-      "Received point cloud with only %zu points (minimum threshold: %d)",
-      input_cloud->size(), min_valid_points_);
+      "Received point cloud with only %zu valid points (minimum threshold: %d)",
+      clean_cloud->size(), min_valid_points_);
     tracked_objects_count_ = 0;
     last_processing_latency_ms_ = 0.0;
     return;
   }
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr non_table_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  segment_table_plane(input_cloud, non_table_cloud, last_inlier_pct_);
+  segment_table_plane(clean_cloud, non_table_cloud, last_inlier_pct_);
 
   auto clusters = extract_clusters(non_table_cloud);
   tracked_objects_count_ = static_cast<int>(clusters.size());
+
+  // Lookup transform from sensor frame to target_frame_ ("world") if different
+  geometry_msgs::msg::TransformStamped sensor_to_target_tf;
+  bool can_transform = false;
+  if (tf_buffer_ && msg->header.frame_id != target_frame_) {
+    try {
+      sensor_to_target_tf = tf_buffer_->lookupTransform(
+        target_frame_, msg->header.frame_id,
+        tf2::TimePointZero, std::chrono::milliseconds(50));
+      can_transform = true;
+    } catch (const tf2::TransformException & ex) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Could not transform pose from %s to %s: %s",
+        msg->header.frame_id.c_str(), target_frame_.c_str(), ex.what());
+    }
+  }
 
   geometry_msgs::msg::PoseArray pose_array;
   pose_array.header.stamp = msg->header.stamp;
@@ -283,6 +317,9 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   for (size_t i = 0; i < clusters.size(); ++i) {
     geometry_msgs::msg::Pose target_pose;
     if (compute_cluster_pose(clusters[i], target_pose)) {
+      if (can_transform) {
+        tf2::doTransform(target_pose, target_pose, sensor_to_target_tf);
+      }
       pose_array.poses.push_back(target_pose);
 
       // Broadcast dynamic TF

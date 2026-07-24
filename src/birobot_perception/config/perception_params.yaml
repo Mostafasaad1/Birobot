@@ -1,6 +1,6 @@
 birobot_perception_node:
   ros__parameters:
-    input_cloud_topic: "/birobot/depth_camera/points"
+    input_cloud_topic: "/birobot/depth_camera/points/points"
     target_frame: "world"
     ransac_distance_threshold: 0.015
     ransac_max_iterations: 1000
@@ -10,4 +10,4 @@ birobot_perception_node:
     max_tracked_objects: 2
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
-    min_valid_points: 1000
+    min_valid_points: 100
