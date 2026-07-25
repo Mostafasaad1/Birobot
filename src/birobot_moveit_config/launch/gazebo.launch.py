@@ -176,11 +176,14 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Clock Bridge (Gazebo Sim -> ROS 2)
+    # Parameter Bridge (Gazebo Sim -> ROS 2)
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
-        arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+        arguments=[
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+            '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+        ],
         output='screen'
     )
 

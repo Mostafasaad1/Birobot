@@ -14,8 +14,10 @@ def test_sensors_3d_yaml_configuration():
     assert 'sensors' in config, "sensors list missing from sensors_3d.yaml"
     sensors = config['sensors']
     assert len(sensors) > 0, "No sensor plugins defined in sensors_3d.yaml"
+    assert 'point_cloud_sensor' in sensors
 
-    camera_sensor = sensors[0]
+    assert 'point_cloud_sensor' in config
+    camera_sensor = config['point_cloud_sensor']
     assert camera_sensor.get('sensor_plugin') == 'occupancy_map_monitor/PointCloudOctomapUpdater'
     assert camera_sensor.get('point_cloud_topic') == '/birobot/depth_camera/points/points'
     assert camera_sensor.get('max_range') == 3.0
