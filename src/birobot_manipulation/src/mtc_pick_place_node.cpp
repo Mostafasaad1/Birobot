@@ -269,7 +269,7 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
 
   auto stage_ik = std::make_unique<mtc::stages::ComputeIK>("Grasp Pose IK", std::move(stage_pose));
   stage_ik->setMaxIKSolutions(8);
-  stage_ik->setMinSolutionDistance(1.0);
+  stage_ik->setMinSolutionDistance(0.1);
   stage_ik->setIKFrame(ik_frame_);
   stage_ik->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group" });
   stage_ik->properties().configureInitFrom(mtc::Stage::INTERFACE, { "target_pose" });
