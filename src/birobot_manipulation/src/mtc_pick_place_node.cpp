@@ -6,11 +6,15 @@
 #include <string>
 #include <vector>
 
+#include <moveit/task_constructor/container.h>
+#include <moveit/task_constructor/container.h>
 #include <moveit/task_constructor/stages/current_state.h>
 #include <moveit/task_constructor/stages/connect.h>
 #include <moveit/task_constructor/stages/move_relative.h>
 #include <moveit/task_constructor/stages/move_to.h>
 #include <moveit/task_constructor/stages/modify_planning_scene.h>
+#include <moveit/task_constructor/stages/generate_pose.h>
+#include <moveit/task_constructor/stages/compute_ik.h>
 
 namespace birobot_manipulation
 {
@@ -30,10 +34,10 @@ MtcPickPlaceNode::~MtcPickPlaceNode()
 
 void MtcPickPlaceNode::declareParameters()
 {
-  declare_parameter<std::string>("arm_group_name", "ur_arm");
-  declare_parameter<std::string>("hand_group_name", "gripper");
-  declare_parameter<std::string>("eef_name", "hand");
-  declare_parameter<std::string>("ik_frame", "tool0");
+  declare_parameter<std::string>("arm_group_name", "arm_1");
+  declare_parameter<std::string>("hand_group_name", "arm1_hand");
+  declare_parameter<std::string>("eef_name", "arm1_ee");
+  declare_parameter<std::string>("ik_frame", "arm1_tool0");
   declare_parameter<std::string>("world_frame", "world");
   declare_parameter<double>("max_velocity_scaling", 0.1);
   declare_parameter<double>("max_acceleration_scaling", 0.1);
@@ -44,7 +48,21 @@ MtcPickPlaceNode::on_configure(const rclcpp_lifecycle::State & /*previous_state*
 {
   RCLCPP_INFO(get_logger(), "Configuring MtcPickPlaceNode...");
 
-  node_handle_ = rclcpp::Node::make_shared("mtc_helper_node");
+  rclcpp::NodeOptions node_options;
+  node_options.automatically_declare_parameters_from_overrides(true);
+  node_options.append_parameter_override("ompl.planning_plugin", "ompl_interface/OMPLPlanner");
+  node_handle_ = rclcpp::Node::make_shared("mtc_helper_node", node_options);
+  if (!node_handle_->has_parameter("ompl.planning_plugin")) {
+    node_handle_->declare_parameter("ompl.planning_plugin", std::string("ompl_interface/OMPLPlanner"));
+  }
+
+  std::string robot_desc, robot_desc_sem;
+  if (get_parameter("robot_description", robot_desc) && !node_handle_->has_parameter("robot_description")) {
+    node_handle_->declare_parameter("robot_description", robot_desc);
+  }
+  if (get_parameter("robot_description_semantic", robot_desc_sem) && !node_handle_->has_parameter("robot_description_semantic")) {
+    node_handle_->declare_parameter("robot_description_semantic", robot_desc_sem);
+  }
 
   get_parameter("arm_group_name", arm_group_name_);
   get_parameter("hand_group_name", hand_group_name_);
@@ -77,6 +95,12 @@ MtcPickPlaceNode::on_activate(const rclcpp_lifecycle::State & previous_state)
   LifecycleNode::on_activate(previous_state);
   RCLCPP_INFO(get_logger(), "Activating MtcPickPlaceNode...");
 
+  if (node_handle_) {
+    helper_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    helper_executor_->add_node(node_handle_);
+    helper_thread_ = std::thread([this]() { helper_executor_->spin(); });
+  }
+
   diagnostic_timer_ = create_wall_timer(
     1000ms, std::bind(&MtcPickPlaceNode::publishDiagnostics, this));
 
@@ -88,6 +112,13 @@ MtcPickPlaceNode::on_deactivate(const rclcpp_lifecycle::State & previous_state)
 {
   RCLCPP_INFO(get_logger(), "Deactivating MtcPickPlaceNode...");
   diagnostic_timer_.reset();
+  if (helper_executor_) {
+    helper_executor_->cancel();
+    if (helper_thread_.joinable()) {
+      helper_thread_.join();
+    }
+    helper_executor_.reset();
+  }
   LifecycleNode::on_deactivate(previous_state);
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
@@ -98,6 +129,7 @@ MtcPickPlaceNode::on_cleanup(const rclcpp_lifecycle::State & /*previous_state*/)
   RCLCPP_INFO(get_logger(), "Cleaning up MtcPickPlaceNode...");
   action_server_.reset();
   diagnostic_pub_.reset();
+  node_handle_.reset();
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
@@ -190,9 +222,14 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
     task.loadRobotModel(node_handle_);
   }
 
+  task.setProperty("group", arm_group_name_);
+  task.setProperty("eef", eef_name_);
+  task.setProperty("hand", hand_group_name_);
+  task.setProperty("ik_frame", ik_frame_);
+
   auto sampling_planner = node_handle_ ?
-    std::make_shared<mtc::solvers::PipelinePlanner>(node_handle_) :
-    std::make_shared<mtc::solvers::PipelinePlanner>(rclcpp::Node::make_shared("mtc_fallback_node"));
+    std::make_shared<mtc::solvers::PipelinePlanner>(node_handle_, "ompl", "ompl_interface/OMPLPlanner") :
+    std::make_shared<mtc::solvers::PipelinePlanner>(rclcpp::Node::make_shared("mtc_fallback_node"), "ompl", "ompl_interface/OMPLPlanner");
   sampling_planner->setMaxVelocityScalingFactor(max_velocity_scaling_);
   sampling_planner->setMaxAccelerationScalingFactor(max_acceleration_scaling_);
 
@@ -200,11 +237,12 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   cartesian_planner->setMaxVelocityScalingFactor(max_velocity_scaling_);
   cartesian_planner->setMaxAccelerationScalingFactor(max_acceleration_scaling_);
 
-  // Stage 1: Current State
+  // Stage 1: Current State (Forward)
   auto stage_current = std::make_unique<mtc::stages::CurrentState>("Current State");
+  auto stage_current_ptr = stage_current.get();
   task.add(std::move(stage_current));
 
-  // Stage 2: Connect
+  // Stage 2: Connect (Links forward Current State to backward Approach)
   auto stage_connect = std::make_unique<mtc::stages::Connect>(
     "Connect",
     mtc::stages::Connect::GroupPlannerVector{{arm_group_name_, sampling_planner}});
@@ -212,32 +250,42 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   stage_connect->properties().configureInitFrom(mtc::Stage::PARENT);
   task.add(std::move(stage_connect));
 
-  // Stage 3: Approach
+  // Stage 3: Approach (Backward propagation from ComputeIK)
   auto stage_approach = std::make_unique<mtc::stages::MoveRelative>("Approach", cartesian_planner);
-  stage_approach->properties().set("group", arm_group_name_);
+  stage_approach->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+  stage_approach->setIKFrame(ik_frame_);
   geometry_msgs::msg::Vector3Stamped approach_vec;
-  approach_vec.header.frame_id = world_frame_;
+  approach_vec.header.frame_id = ik_frame_;
   approach_vec.vector.z = -0.1;
   stage_approach->setDirection(approach_vec);
   stage_approach->setMinMaxDistance(0.02, 0.15);
   task.add(std::move(stage_approach));
 
-  // Stage 4: Grasp Pose Target
-  auto stage_grasp = std::make_unique<mtc::stages::MoveTo>("Grasp Pose", sampling_planner);
-  stage_grasp->properties().set("group", arm_group_name_);
-  stage_grasp->setGoal(target_pose);
-  task.add(std::move(stage_grasp));
+  // Stage 4: Target Pose IK Generator (Links backward approach to forward attach/retreat)
+  auto stage_pose = std::make_unique<mtc::stages::GeneratePose>("Generate Target Pose");
+  stage_pose->properties().configureInitFrom(mtc::Stage::PARENT);
+  stage_pose->setPose(target_pose);
+  stage_pose->setMonitoredStage(stage_current_ptr);
 
-  // Stage 5: Attach Object
+  auto stage_ik = std::make_unique<mtc::stages::ComputeIK>("Grasp Pose IK", std::move(stage_pose));
+  stage_ik->setMaxIKSolutions(8);
+  stage_ik->setMinSolutionDistance(1.0);
+  stage_ik->setIKFrame(ik_frame_);
+  stage_ik->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group" });
+  stage_ik->properties().configureInitFrom(mtc::Stage::INTERFACE, { "target_pose" });
+  task.add(std::move(stage_ik));
+
+  // Stage 5: Attach Object (Forward propagation)
   if (!object_id.empty()) {
     auto stage_attach = std::make_unique<mtc::stages::ModifyPlanningScene>("Attach");
     stage_attach->attachObject(object_id, ik_frame_);
     task.add(std::move(stage_attach));
   }
 
-  // Stage 6: Retreat
+  // Stage 6: Retreat (Forward propagation)
   auto stage_retreat = std::make_unique<mtc::stages::MoveRelative>("Retreat", cartesian_planner);
-  stage_retreat->properties().set("group", arm_group_name_);
+  stage_retreat->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
+  stage_retreat->setIKFrame(ik_frame_);
   geometry_msgs::msg::Vector3Stamped retreat_vec;
   retreat_vec.header.frame_id = world_frame_;
   retreat_vec.vector.z = 0.15;
@@ -276,16 +324,27 @@ void MtcPickPlaceNode::executeTask(
   try {
     task = createPickPlaceTask(goal->target_pose, goal->object_id);
     task.init();
+  } catch (const moveit::task_constructor::InitStageException & ex) {
+    current_state_ = TaskExecutionState::FAILED;
+    publishFeedback(goal_handle, "Connect", "FAILED");
+    std::ostringstream ss;
+    ss << ex;
+    RCLCPP_ERROR_STREAM(get_logger(), "MTC InitStageException: " << ss.str());
+    result->success = false;
+    result->error_message = std::string("Task creation exception: ") + ss.str();
+    goal_handle->abort(result);
+    return;
   } catch (const std::exception & ex) {
     current_state_ = TaskExecutionState::FAILED;
     publishFeedback(goal_handle, "Connect", "FAILED");
+    RCLCPP_ERROR_STREAM(get_logger(), "MTC Exception: " << ex.what());
     result->success = false;
     result->error_message = std::string("Task creation exception: ") + ex.what();
     goal_handle->abort(result);
     return;
   }
 
-  if (task.plan(1) != moveit::core::MoveItErrorCode::SUCCESS || task.solutions().empty()) {
+  if (task.plan(5) != moveit::core::MoveItErrorCode::SUCCESS || task.solutions().empty()) {
     current_state_ = TaskExecutionState::FAILED;
     publishFeedback(goal_handle, "Connect", "FAILED");
     RCLCPP_ERROR(get_logger(), "MTC planning failed - triggering home fallback");
