@@ -204,6 +204,7 @@ def launch_setup(context, *args, **kwargs):
         executable='spawner',
         arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     arm1_controller_spawner = Node(
@@ -211,6 +212,7 @@ def launch_setup(context, *args, **kwargs):
         executable='spawner',
         arguments=['arm1_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     arm2_controller_spawner = Node(
@@ -218,6 +220,7 @@ def launch_setup(context, *args, **kwargs):
         executable='spawner',
         arguments=['arm2_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     # 8. Perception Managed Lifecycle Node

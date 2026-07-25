@@ -5,6 +5,7 @@ gz_ros_control:
 controller_manager:
   ros__parameters:
     update_rate: 125  # Hz
+    use_sim_time: true
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

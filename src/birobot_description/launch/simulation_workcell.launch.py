@@ -205,6 +205,7 @@ def launch_setup(context, *args, **kwargs):
             '/controller_manager',
         ],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     arm1_controller_spawner = Node(
@@ -216,6 +217,7 @@ def launch_setup(context, *args, **kwargs):
             '/controller_manager',
         ],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     arm2_controller_spawner = Node(
@@ -227,6 +229,7 @@ def launch_setup(context, *args, **kwargs):
             '/controller_manager',
         ],
         output='screen',
+        parameters=[{'use_sim_time': True}],
     )
 
     # RViz2 visualization node
