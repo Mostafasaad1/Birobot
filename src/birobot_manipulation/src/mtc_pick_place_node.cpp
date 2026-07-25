@@ -338,6 +338,22 @@ void MtcPickPlaceNode::executeTask(
   const auto goal = goal_handle->get_goal();
   auto result = std::make_shared<PickAndPlace::Result>();
 
+  // Dynamic arm selection: choose the arm closest to the target part
+  // Arm 2 is at +0.6 X, Arm 1 is at -0.6 X.
+  if (goal->target_pose.pose.position.x > 0.0) {
+    arm_group_name_ = "arm_2";
+    hand_group_name_ = "arm2_hand";
+    eef_name_ = "arm2_ee";
+    ik_frame_ = "arm2_gripper_tcp";
+    RCLCPP_INFO(get_logger(), "Target is on +X side (nearest to arm_2). Dynamically selected arm_2.");
+  } else {
+    arm_group_name_ = "arm_1";
+    hand_group_name_ = "arm1_hand";
+    eef_name_ = "arm1_ee";
+    ik_frame_ = "arm1_gripper_tcp";
+    RCLCPP_INFO(get_logger(), "Target is on -X side (nearest to arm_1). Dynamically selected arm_1.");
+  }
+
   current_state_ = TaskExecutionState::PLANNING;
 
   publishFeedback(goal_handle, "Current State", "IN_PROGRESS");
