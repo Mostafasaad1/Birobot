@@ -14,6 +14,7 @@ find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common segmentation filters search cluster)
 
@@ -42,6 +43,7 @@ ament_target_dependencies(irregular_object_pose_estimator_lib
   lifecycle_msgs
   tf2_ros
   tf2_geometry_msgs
+  tf2_sensor_msgs
   pcl_conversions
 )
 target_link_libraries(irregular_object_pose_estimator_lib ${PCL_LIBRARIES})

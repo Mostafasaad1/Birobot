@@ -13,6 +13,7 @@
 #include <pcl/common/centroid.h>
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -262,8 +263,27 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   auto start_time = std::chrono::high_resolution_clock::now();
   last_cloud_stamp_ = msg->header.stamp;
 
+  // Transform pointcloud to target_frame_ ("world") BEFORE any math
+  sensor_msgs::msg::PointCloud2 transformed_msg;
+  if (tf_buffer_ && msg->header.frame_id != target_frame_) {
+    try {
+      auto transform = tf_buffer_->lookupTransform(
+        target_frame_, msg->header.frame_id,
+        tf2::TimePointZero, std::chrono::milliseconds(50));
+      tf2::doTransform(*msg, transformed_msg, transform);
+    } catch (const tf2::TransformException & ex) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Could not transform pointcloud from %s to %s: %s",
+        msg->header.frame_id.c_str(), target_frame_.c_str(), ex.what());
+      return;
+    }
+  } else {
+    transformed_msg = *msg;
+  }
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  pcl::fromROSMsg(*msg, *input_cloud);
+  pcl::fromROSMsg(transformed_msg, *input_cloud);
 
   // Filter out NaN / Inf points from camera stream
   pcl::PointCloud<pcl::PointXYZ>::Ptr clean_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -291,23 +311,6 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   auto clusters = extract_clusters(non_table_cloud);
   tracked_objects_count_ = static_cast<int>(clusters.size());
 
-  // Lookup transform from sensor frame to target_frame_ ("world") if different
-  geometry_msgs::msg::TransformStamped sensor_to_target_tf;
-  bool can_transform = false;
-  if (tf_buffer_ && msg->header.frame_id != target_frame_) {
-    try {
-      sensor_to_target_tf = tf_buffer_->lookupTransform(
-        target_frame_, msg->header.frame_id,
-        tf2::TimePointZero, std::chrono::milliseconds(50));
-      can_transform = true;
-    } catch (const tf2::TransformException & ex) {
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "Could not transform pose from %s to %s: %s",
-        msg->header.frame_id.c_str(), target_frame_.c_str(), ex.what());
-    }
-  }
-
   geometry_msgs::msg::PoseArray pose_array;
   pose_array.header.stamp = msg->header.stamp;
   pose_array.header.frame_id = target_frame_;
@@ -317,9 +320,7 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   for (size_t i = 0; i < clusters.size(); ++i) {
     geometry_msgs::msg::Pose target_pose;
     if (compute_cluster_pose(clusters[i], target_pose)) {
-      if (can_transform) {
-        tf2::doTransform(target_pose, target_pose, sensor_to_target_tf);
-      }
+
       pose_array.poses.push_back(target_pose);
 
       // Broadcast dynamic TF
@@ -346,7 +347,7 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
     sensor_msgs::msg::PointCloud2 object_cloud_msg;
     pcl::toROSMsg(combined_object_cloud, object_cloud_msg);
     object_cloud_msg.header.stamp = msg->header.stamp;
-    object_cloud_msg.header.frame_id = msg->header.frame_id;
+    object_cloud_msg.header.frame_id = target_frame_;
     pub_object_cloud_->publish(object_cloud_msg);
   }
 
