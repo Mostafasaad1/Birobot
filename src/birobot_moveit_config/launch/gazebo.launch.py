@@ -1,30 +1,21 @@
 """
-gazebo.launch.py — Birobot launch bringing up Gazebo Sim + MoveIt 2 + RViz2 + ros2_control
-
-Launches:
-  1. GZ_SIM_RESOURCE_PATH env var (ensures Gazebo Sim resolves ur10e meshes)
-  2. Gazebo Sim empty world (ros_gz_sim)
-  3. birobot spawn entity in Gazebo Sim
-  4. robot_state_publisher
-  5. ros2_control_node + controller spawners
-  6. move_group
-  7. rviz2
+gazebo.launch.py — Birobot launch bringing up Gazebo Sim + MoveIt 2 + RViz2 + ros2_control + Workspace Objects
 """
 
 import os
+import shutil
 import tempfile
 import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
-    ExecuteProcess,
     IncludeLaunchDescription,
     RegisterEventHandler,
     SetEnvironmentVariable,
     TimerAction,
 )
-from launch.event_handlers import OnProcessExit, OnProcessStart
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 import xacro
@@ -52,18 +43,10 @@ def generate_launch_description():
     )
 
     # ── 1. URDF / robot_description ──────────────────────────────────────────
-    # IMPORTANT: process xacro ONCE and reuse for BOTH robot_state_publisher
-    # AND Gazebo spawn. Using two different xacro invocations (e.g. via
-    # subprocess with different args) causes RSP and Gazebo to have divergent
-    # robot models, which is the root cause of the Gazebo↔RViz pose mismatch.
     original_controllers_yaml_path = os.path.join(
         birobot_description_share, 'config', 'controllers.yaml'
     )
-    # WORKAROUND for ROS 2 Jazzy controller_manager bug: 
-    # controller_manager copies node arguments to controllers, but blindly drops any argument 
-    # containing the substring "robot_description". We copy the yaml to /tmp to avoid the substring.
     controllers_yaml_path = '/tmp/birobot_controllers.yaml'
-    import shutil
     shutil.copy(original_controllers_yaml_path, controllers_yaml_path)
 
     xacro_file = os.path.join(birobot_description_share, 'urdf', 'birobot.urdf.xacro')
@@ -78,7 +61,7 @@ def generate_launch_description():
     robot_description_str = doc.toxml()
     robot_description = {'robot_description': robot_description_str}
 
-    # Write the canonical URDF to a temp file for Gazebo spawn_entity
+    # Write canonical URDF for Gazebo spawn_entity
     _urdf_tmp = tempfile.NamedTemporaryFile(
         mode='w', suffix='.urdf', delete=False, prefix='birobot_spawn_'
     )
@@ -104,7 +87,6 @@ def generate_launch_description():
     )
     yaml.dump(merged_ros2ctrl_params, _ctrl_params_tmp)
     _ctrl_params_tmp.close()
-    merged_ros2ctrl_params_file = _ctrl_params_tmp.name
 
     # ── MoveIt parameters ────────────────────────────────────────────────────
     srdf_file = os.path.join(birobot_moveit_share, 'config', 'birobot.srdf')
@@ -141,15 +123,7 @@ def generate_launch_description():
 
     rviz_config_file = os.path.join(birobot_moveit_share, 'config', 'moveit.rviz')
 
-    # =========================================================================
-    # Launch Actions & Nodes
-    # =========================================================================
-
-    controllers_yaml_path = os.path.join(
-        birobot_description_share, 'config', 'controllers.yaml'
-    )
-
-    # Gazebo Sim
+    # ── 2. Gazebo Sim & Spawners ──────────────────────────────────────────────
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     gazebo_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -158,8 +132,6 @@ def generate_launch_description():
         launch_arguments={'gz_args': '-r empty.sdf'}.items(),
     )
 
-    # Spawn entity into Gazebo — use the same URDF as robot_state_publisher
-    # (urdf_spawn_file was written from the xacro.process_file() call above)
     spawn_entity = Node(
         package='ros_gz_sim',
         executable='create',
@@ -172,6 +144,75 @@ def generate_launch_description():
             '-J', 'arm1_wrist_1_joint', '-1.5708',
             '-J', 'arm2_shoulder_lift_joint', '-1.5708',
             '-J', 'arm2_wrist_1_joint', '-1.5708',
+        ],
+        output='screen',
+    )
+
+    # Workspace Objects
+    obj1_sdf = """<sdf version="1.6">
+      <model name="irregular_object_1">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="link">
+          <inertial>
+            <mass>0.5</mass>
+            <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.002</iyy><iyz>0</iyz><izz>0.002</izz></inertia>
+          </inertial>
+          <visual name="visual">
+            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+            <material><ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material>
+          </visual>
+          <collision name="collision">
+            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+          </collision>
+        </link>
+      </model>
+    </sdf>"""
+
+    spawn_object_1 = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-string', obj1_sdf,
+            '-name', 'irregular_object_1',
+            '-world', 'empty',
+            '-x', '0.10',
+            '-y', '0.05',
+            '-z', '0.08',
+            '-Y', '0.4',
+        ],
+        output='screen',
+    )
+
+    obj2_sdf = """<sdf version="1.6">
+      <model name="irregular_object_2">
+        <pose>0 0 0 0 0 0</pose>
+        <link name="link">
+          <inertial>
+            <mass>0.4</mass>
+            <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia>
+          </inertial>
+          <visual name="visual">
+            <geometry><box><size>0.18 0.06 0.05</size></box></geometry>
+            <material><ambient>0 0 1 1</ambient><diffuse>0 0 1 1</diffuse></material>
+          </visual>
+          <collision name="collision">
+            <geometry><box><size>0.18 0.06 0.05</size></box></geometry>
+          </collision>
+        </link>
+      </model>
+    </sdf>"""
+
+    spawn_object_2 = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-string', obj2_sdf,
+            '-name', 'irregular_object_2',
+            '-world', 'empty',
+            '-x', '-0.15',
+            '-y', '-0.10',
+            '-z', '0.075',
+            '-Y', '-0.8',
         ],
         output='screen',
     )
@@ -193,9 +234,6 @@ def generate_launch_description():
         output='screen',
         parameters=[robot_description, {'use_sim_time': True}],
     )
-
-    # (Removed static joint_state_publisher to prevent /joint_states conflicts with joint_state_broadcaster)
-
 
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
@@ -247,10 +285,6 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Sequencing:
-    #   spawn_entity exits  →  5s timer  →  JSB spawner
-    #   JSB spawner exits   →  arm controller spawners
-    # Once JSB is active it publishes real /joint_states which overrides JSP.
     load_jsb = RegisterEventHandler(
         OnProcessExit(
             target_action=spawn_entity,
@@ -318,6 +352,8 @@ def generate_launch_description():
         gazebo_sim,
         clock_bridge,
         spawn_entity,
+        spawn_object_1,
+        spawn_object_2,
         robot_state_publisher,
         load_jsb,
         load_arm_controllers_and_moveit,
