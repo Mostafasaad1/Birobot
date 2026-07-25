@@ -224,6 +224,26 @@ def generate_launch_description():
         output='screen',
     )
 
+    arm1_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm1_gripper_controller',
+            '--controller-manager', '/controller_manager',
+        ],
+        output='screen',
+    )
+
+    arm2_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm2_gripper_controller',
+            '--controller-manager', '/controller_manager',
+        ],
+        output='screen',
+    )
+
     # Sequencing:
     #   spawn_entity exits  →  5s timer  →  JSB spawner
     #   JSB spawner exits   →  arm controller spawners
@@ -271,7 +291,14 @@ def generate_launch_description():
     load_arm_controllers_and_moveit = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
-            on_exit=[arm1_trajectory_spawner, arm2_trajectory_spawner, move_group_node, rviz_node],
+            on_exit=[
+                arm1_trajectory_spawner,
+                arm2_trajectory_spawner,
+                arm1_gripper_spawner,
+                arm2_gripper_spawner,
+                move_group_node,
+                rviz_node,
+            ],
         )
     )
 

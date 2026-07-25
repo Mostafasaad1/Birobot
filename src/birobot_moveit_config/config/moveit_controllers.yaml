@@ -2,6 +2,8 @@ moveit_simple_controller_manager:
   controller_names:
     - arm1_joint_trajectory_controller
     - arm2_joint_trajectory_controller
+    - arm1_gripper_controller
+    - arm2_gripper_controller
 
   arm1_joint_trajectory_controller:
     type: FollowJointTrajectory
@@ -26,3 +28,20 @@ moveit_simple_controller_manager:
       - arm2_wrist_1_joint
       - arm2_wrist_2_joint
       - arm2_wrist_3_joint
+
+  arm1_gripper_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - arm1_gripper_left_finger_joint
+      - arm1_gripper_right_finger_joint
+
+  arm2_gripper_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - arm2_gripper_left_finger_joint
+      - arm2_gripper_right_finger_joint
+

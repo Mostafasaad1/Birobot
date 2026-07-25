@@ -19,6 +19,26 @@
         <group name="arm_2"/>
     </group>
 
+    <!--Group arm1_hand: Gripper group for Left Arm-->
+    <group name="arm1_hand">
+        <link name="arm1_gripper_base_link"/>
+        <link name="arm1_gripper_left_finger"/>
+        <link name="arm1_gripper_right_finger"/>
+        <link name="arm1_gripper_tcp"/>
+        <joint name="arm1_gripper_left_finger_joint"/>
+        <joint name="arm1_gripper_right_finger_joint"/>
+    </group>
+
+    <!--Group arm2_hand: Gripper group for Right Arm-->
+    <group name="arm2_hand">
+        <link name="arm2_gripper_base_link"/>
+        <link name="arm2_gripper_left_finger"/>
+        <link name="arm2_gripper_right_finger"/>
+        <link name="arm2_gripper_tcp"/>
+        <joint name="arm2_gripper_left_finger_joint"/>
+        <joint name="arm2_gripper_right_finger_joint"/>
+    </group>
+
     <!--GROUP STATES: Default named joint poses-->
     <group_state name="home" group="arm_1">
         <joint name="arm1_elbow_joint" value="0"/>
@@ -50,10 +70,28 @@
         <joint name="arm2_wrist_2_joint" value="0"/>
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
+    <group_state name="open" group="arm1_hand">
+        <joint name="arm1_gripper_left_finger_joint" value="0.04"/>
+        <joint name="arm1_gripper_right_finger_joint" value="0.04"/>
+    </group_state>
+    <group_state name="closed" group="arm1_hand">
+        <joint name="arm1_gripper_left_finger_joint" value="0"/>
+        <joint name="arm1_gripper_right_finger_joint" value="0"/>
+    </group_state>
+    <group_state name="open" group="arm2_hand">
+        <joint name="arm2_gripper_left_finger_joint" value="0.04"/>
+        <joint name="arm2_gripper_right_finger_joint" value="0.04"/>
+    </group_state>
+    <group_state name="closed" group="arm2_hand">
+        <joint name="arm2_gripper_left_finger_joint" value="0"/>
+        <joint name="arm2_gripper_right_finger_joint" value="0"/>
+    </group_state>
 
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
     <end_effector name="arm1_ee" parent_link="arm1_tool0" group="arm_1"/>
     <end_effector name="arm2_ee" parent_link="arm2_tool0" group="arm_2"/>
+    <end_effector name="arm1_gripper" parent_link="arm1_tool0" group="arm1_hand"/>
+    <end_effector name="arm2_gripper" parent_link="arm2_tool0" group="arm2_hand"/>
 
     <!--VIRTUAL JOINT: Purpose: this element defines a virtual joint between a robot link and an external frame of reference (written trace because it has no child link)-->
     <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="workcell_base_link"/>
@@ -83,6 +121,14 @@
     <disable_collisions link1="arm1_wrist_1_link" link2="arm1_flange" reason="Never"/>
     <disable_collisions link1="arm1_wrist_1_link" link2="arm1_tool0" reason="Never"/>
 
+    <!-- Arm 1 Gripper Collisions -->
+    <disable_collisions link1="arm1_tool0" link2="arm1_gripper_base_link" reason="Adjacent"/>
+    <disable_collisions link1="arm1_flange" link2="arm1_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm1_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm1_gripper_left_finger" reason="Adjacent"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm1_gripper_right_finger" reason="Adjacent"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm1_gripper_right_finger" reason="Default"/>
+
     <!-- Arm 2 Internal Link Pairs (Adjacent & Default/Never) -->
     <disable_collisions link1="arm2_base_link" link2="arm2_base_link_inertia" reason="Adjacent"/>
     <disable_collisions link1="arm2_base_link" link2="arm2_shoulder_link" reason="Never"/>
@@ -100,6 +146,14 @@
     <disable_collisions link1="arm2_wrist_1_link" link2="arm2_flange" reason="Never"/>
     <disable_collisions link1="arm2_wrist_1_link" link2="arm2_tool0" reason="Never"/>
 
+    <!-- Arm 2 Gripper Collisions -->
+    <disable_collisions link1="arm2_tool0" link2="arm2_gripper_base_link" reason="Adjacent"/>
+    <disable_collisions link1="arm2_flange" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm2_wrist_3_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm2_gripper_base_link" link2="arm2_gripper_left_finger" reason="Adjacent"/>
+    <disable_collisions link1="arm2_gripper_base_link" link2="arm2_gripper_right_finger" reason="Adjacent"/>
+    <disable_collisions link1="arm2_gripper_left_finger" link2="arm2_gripper_right_finger" reason="Default"/>
+
     <!-- Inter-Arm Base Pairs (Fixed 1.2m distance - Never in Collision) -->
     <disable_collisions link1="arm1_base_link" link2="arm2_base_link" reason="Never"/>
     <disable_collisions link1="arm1_base_link" link2="arm2_base_link_inertia" reason="Never"/>
@@ -111,3 +165,4 @@
     <disable_collisions link1="arm1_shoulder_link" link2="arm2_base_link_inertia" reason="Never"/>
     <disable_collisions link1="arm1_shoulder_link" link2="arm2_shoulder_link" reason="Never"/>
 </robot>
+

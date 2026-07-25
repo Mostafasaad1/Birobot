@@ -232,6 +232,30 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': True}],
     )
 
+    arm1_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm1_gripper_controller',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+    )
+
+    arm2_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm2_gripper_controller',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+    )
+
     # RViz2 visualization node
     try:
         perception_share = FindPackageShare('birobot_perception').find('birobot_perception')
@@ -263,8 +287,11 @@ def launch_setup(context, *args, **kwargs):
         joint_state_broadcaster_spawner,
         arm1_controller_spawner,
         arm2_controller_spawner,
+        arm1_gripper_spawner,
+        arm2_gripper_spawner,
         rviz_node,
     ]
+
 
 
 def generate_launch_description():

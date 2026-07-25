@@ -26,7 +26,9 @@ def test_srdf_and_kinematics():
     assert 'arm_1' in groups, "Planning group arm_1 missing from SRDF"
     assert 'arm_2' in groups, "Planning group arm_2 missing from SRDF"
     assert 'dual_arms' in groups, "Planning group dual_arms missing from SRDF"
-    assert len(groups) == 3, f"Expected exactly 3 planning groups, found {len(groups)}"
+    assert 'arm1_hand' in groups, "Planning group arm1_hand missing from SRDF"
+    assert 'arm2_hand' in groups, "Planning group arm2_hand missing from SRDF"
+    assert len(groups) == 5, f"Expected exactly 5 planning groups, found {len(groups)}"
 
     # Check arm_1 chain
     arm_1_chain = groups['arm_1'].find('chain')
@@ -48,6 +50,7 @@ def test_srdf_and_kinematics():
     ees = root.findall('end_effector')
     ee_names = [ee.attrib.get('name') for ee in ees]
     assert 'arm1_ee' in ee_names and 'arm2_ee' in ee_names
+    assert 'arm1_gripper' in ee_names and 'arm2_gripper' in ee_names
 
     # Check self-collision matrix disable_collisions entries
     disabled = root.findall('disable_collisions')

@@ -125,6 +125,19 @@
     <origin xyz="${arm2_x} ${arm2_y} ${arm2_z}" rpy="${arm2_roll} ${arm2_pitch} ${arm2_yaw}"/>
   </xacro:ur_robot>
 
+  <!-- Include 2-Finger Gripper macro -->
+  <xacro:include filename="$(find birobot_description)/urdf/grippers/2f_gripper.urdf.xacro"/>
+
+  <!-- Instantiate 2-Finger Gripper for Arm 1 -->
+  <xacro:two_finger_gripper name="arm1_gripper" prefix="arm1_gripper_" parent="arm1_tool0">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:two_finger_gripper>
+
+  <!-- Instantiate 2-Finger Gripper for Arm 2 -->
+  <xacro:two_finger_gripper name="arm2_gripper" prefix="arm2_gripper_" parent="arm2_tool0">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:two_finger_gripper>
+
   <!-- Include 3D Depth Camera macro -->
   <xacro:include filename="$(find birobot_description)/urdf/sensors/depth_camera.urdf.xacro"/>
 
