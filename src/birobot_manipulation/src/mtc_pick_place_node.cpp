@@ -237,10 +237,11 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   auto stage_current_ptr = stage_current.get();
   task.add(std::move(stage_current));
 
-  // Stage 2: Allow Collision between hand/gripper and target object
+  // Stage 2: Allow Collision between hand/gripper/arm and target object
   if (!object_id.empty()) {
-    auto stage_allow_collision = std::make_unique<mtc::stages::ModifyPlanningScene>("Allow Collision (hand, object)");
-    stage_allow_collision->allowCollisions(object_id, true);
+    auto stage_allow_collision = std::make_unique<mtc::stages::ModifyPlanningScene>("Allow Collision");
+    stage_allow_collision->allowCollisions(object_id, *task.getRobotModel()->getJointModelGroup(arm_group_name_), true);
+    stage_allow_collision->allowCollisions(object_id, *task.getRobotModel()->getJointModelGroup(hand_group_name_), true);
     task.add(std::move(stage_allow_collision));
   }
 
@@ -324,26 +325,49 @@ void MtcPickPlaceNode::executeTask(
 
   publishFeedback(goal_handle, "Connect", "IN_PROGRESS");
 
-  if (!goal->object_id.empty()) {
-    moveit::planning_interface::PlanningSceneInterface psi;
-    moveit_msgs::msg::CollisionObject object;
-    object.header.frame_id = goal->target_pose.header.frame_id.empty() ? world_frame_ : goal->target_pose.header.frame_id;
-    object.id = goal->object_id;
 
-    shape_msgs::msg::SolidPrimitive primitive;
-    primitive.type = primitive.BOX;
-    primitive.dimensions = {0.05, 0.05, 0.05};
-
-    object.primitives.push_back(primitive);
-    object.primitive_poses.push_back(goal->target_pose.pose);
-    object.operation = object.ADD;
-
-    psi.applyCollisionObjects({object});
-  }
 
   moveit::task_constructor::Task task;
   try {
     task = createPickPlaceTask(goal->target_pose, goal->object_id);
+
+    if (!goal->object_id.empty()) {
+      moveit_msgs::msg::PlanningScene scene_msg;
+      scene_msg.is_diff = true;
+
+      moveit_msgs::msg::CollisionObject object;
+      object.header.frame_id = goal->target_pose.header.frame_id.empty() ? world_frame_ : goal->target_pose.header.frame_id;
+      object.id = goal->object_id;
+
+      shape_msgs::msg::SolidPrimitive primitive;
+      primitive.type = primitive.BOX;
+      primitive.dimensions = {0.05, 0.05, 0.05};
+
+      object.primitives.push_back(primitive);
+      object.primitive_poses.push_back(goal->target_pose.pose);
+      object.operation = object.ADD;
+
+      scene_msg.world.collision_objects.push_back(object);
+
+      auto robot_model = task.getRobotModel();
+      if (robot_model) {
+        std::vector<std::string> all_names;
+        all_names.push_back(goal->object_id);
+        for (const auto & name : robot_model->getLinkModelNamesWithCollisionGeometry()) {
+          all_names.push_back(name);
+        }
+
+        scene_msg.allowed_collision_matrix.entry_names = all_names;
+        scene_msg.allowed_collision_matrix.entry_values.resize(all_names.size());
+        for (size_t i = 0; i < all_names.size(); ++i) {
+          scene_msg.allowed_collision_matrix.entry_values[i].enabled.resize(all_names.size(), true);
+        }
+      }
+
+      moveit::planning_interface::PlanningSceneInterface psi;
+      psi.applyPlanningScene(scene_msg);
+    }
+
     task.init();
   } catch (const moveit::task_constructor::InitStageException & ex) {
     current_state_ = TaskExecutionState::FAILED;
@@ -366,7 +390,7 @@ void MtcPickPlaceNode::executeTask(
   }
 
   if (task.plan(5) != moveit::core::MoveItErrorCode::SUCCESS || task.solutions().empty()) {
-    current_state_ = TaskExecutionState::FAILED;
+    current_state_ = TaskExecutionState::IDLE;
     publishFeedback(goal_handle, "Connect", "FAILED");
     RCLCPP_ERROR(get_logger(), "MTC planning failed - triggering home fallback");
     result->success = false;
@@ -388,7 +412,7 @@ void MtcPickPlaceNode::executeTask(
 
   auto execution_result = task.execute(*task.solutions().front());
   if (execution_result != moveit::core::MoveItErrorCode::SUCCESS) {
-    current_state_ = TaskExecutionState::FAILED;
+    current_state_ = TaskExecutionState::IDLE;
     publishFeedback(goal_handle, "Retreat", "FAILED");
     RCLCPP_ERROR(get_logger(), "Collision detected or trajectory execution failed");
     result->success = false;
@@ -398,7 +422,7 @@ void MtcPickPlaceNode::executeTask(
   }
 
   publishFeedback(goal_handle, "Retreat", "SUCCESS");
-  current_state_ = TaskExecutionState::SUCCESS;
+  current_state_ = TaskExecutionState::IDLE;
 
   result->success = true;
   result->error_message = "";
