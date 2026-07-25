@@ -257,6 +257,12 @@ def generate_launch_description():
         )
     )
 
+    sensors_3d_yaml = load_yaml('birobot_moveit_config', 'config/sensors_3d.yaml') or {}
+    octomap_config = {
+        'octomap_frame': 'world',
+        'octomap_resolution': 0.05,
+    }
+
     move_group_node = Node(
         package='moveit_ros_move_group',
         executable='move_group',
@@ -270,6 +276,8 @@ def generate_launch_description():
             {'ompl': ompl_planning_yaml},
             trajectory_execution,
             moveit_controllers_yaml,
+            sensors_3d_yaml,
+            octomap_config,
             {'publish_robot_description_semantic': True},
             {'use_sim_time': True},
         ],
