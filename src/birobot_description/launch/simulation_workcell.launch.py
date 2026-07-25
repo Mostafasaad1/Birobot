@@ -78,13 +78,16 @@ def launch_setup(context, *args, **kwargs):
         parameters=[robot_description, {'use_sim_time': True}],
     )
 
+    headless_str = context.launch_configurations.get('headless', 'false')
+    gz_args_str = '-s -r empty.sdf' if headless_str.lower() in ('true', '1') else '-r empty.sdf'
+
     # Gazebo Sim (ros_gz_sim)
     pkg_ros_gz_sim = FindPackageShare('ros_gz_sim').find('ros_gz_sim')
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        launch_arguments={'gz_args': gz_args_str}.items(),
     )
 
     # Clock & PointCloud Bridges
@@ -306,6 +309,11 @@ def generate_launch_description():
             'use_rviz',
             default_value='true',
             description='Launch RViz2 visualization automatically with workcell',
+        ),
+        DeclareLaunchArgument(
+            'headless',
+            default_value='false',
+            description='Run Gazebo Sim server headless without GUI (-s)',
         ),
     ]
 

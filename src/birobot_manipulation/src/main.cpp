@@ -7,6 +7,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
 
   auto options = rclcpp::NodeOptions();
+  options.automatically_declare_parameters_from_overrides(true);
   auto node = std::make_shared<birobot_manipulation::MtcPickPlaceNode>(options);
 
   // Transition through lifecycle: configure -> activate

@@ -40,11 +40,13 @@ def generate_launch_description():
     kinematics_yaml = load_yaml('birobot_moveit_config', 'config/kinematics.yaml') or {}
     joint_limits_yaml = load_yaml('birobot_moveit_config', 'config/joint_limits.yaml') or {}
     ompl_planning_yaml = load_yaml('birobot_moveit_config', 'config/ompl_planning.yaml') or {}
+    ompl_params = {'ompl.planning_plugin': 'ompl_interface/OMPLPlanner'}
+    for key, value in ompl_planning_yaml.items():
+        ompl_params[f'ompl.{key}'] = value
 
     planning_pipelines_config = {
         'planning_pipelines': ['ompl'],
         'default_planning_pipeline': 'ompl',
-        'ompl.planning_plugin': 'ompl_interface/OMPLPlanner',
     }
 
     node = Node(
@@ -57,7 +59,7 @@ def generate_launch_description():
             {'robot_description_kinematics': kinematics_yaml},
             {'robot_description_planning': joint_limits_yaml},
             planning_pipelines_config,
-            {'ompl': ompl_planning_yaml},
+            ompl_params,
             {'use_sim_time': True},
         ],
     )

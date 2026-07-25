@@ -12,6 +12,7 @@ def generate_launch_description():
 
     spawn_objects = LaunchConfiguration('spawn_objects')
     use_rviz = LaunchConfiguration('use_rviz')
+    headless = LaunchConfiguration('headless')
 
     declared_arguments = [
         DeclareLaunchArgument(
@@ -24,6 +25,11 @@ def generate_launch_description():
             default_value='true',
             description='Launch RViz2 visualization with MoveIt motion planning panel',
         ),
+        DeclareLaunchArgument(
+            'headless',
+            default_value='false',
+            description='Run Gazebo Sim server headless without GUI',
+        ),
     ]
 
     # 1. Gazebo Sim Workcell (Simulation + ros2_control hardware controllers + RSP + test objects + RViz2)
@@ -34,6 +40,7 @@ def generate_launch_description():
         launch_arguments={
             'spawn_objects': spawn_objects,
             'use_rviz': use_rviz,
+            'headless': headless,
         }.items(),
     )
 

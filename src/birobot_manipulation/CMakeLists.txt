@@ -13,6 +13,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
+find_package(shape_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
@@ -38,6 +39,7 @@ ament_target_dependencies(mtc_pick_place_lib
   sensor_msgs
   diagnostic_msgs
   lifecycle_msgs
+  shape_msgs
   moveit_core
   moveit_ros_planning
   moveit_ros_planning_interface

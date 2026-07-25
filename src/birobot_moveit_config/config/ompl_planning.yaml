@@ -36,7 +36,7 @@ dual_arms:
 planner_configs:
   RRTConnectkConfigDefault:
     type: geometric::RRTConnect
-    range: 0.0
+    range: 0.1
   RRTstarConfigDefault:
     type: geometric::RRTstar
-    range: 0.0
+    range: 0.1

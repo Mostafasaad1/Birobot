@@ -74,6 +74,10 @@ def generate_launch_description():
         'octomap_resolution': 0.05,
     }
 
+    mtc_capabilities = {
+        'capabilities': 'move_group/ExecuteTaskSolutionCapability'
+    }
+
     move_group_node = Node(
         package='moveit_ros_move_group',
         executable='move_group',
@@ -89,6 +93,7 @@ def generate_launch_description():
             moveit_controllers_yaml,
             sensors_3d_yaml,
             octomap_config,
+            mtc_capabilities,
             {'publish_robot_description_semantic': True},
             {'use_sim_time': True},
         ],

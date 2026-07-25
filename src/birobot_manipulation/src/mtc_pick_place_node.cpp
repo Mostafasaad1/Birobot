@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 
-#include <moveit/task_constructor/container.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <shape_msgs/msg/solid_primitive.hpp>
+
 #include <moveit/task_constructor/container.h>
 #include <moveit/task_constructor/stages/current_state.h>
 #include <moveit/task_constructor/stages/connect.h>
@@ -50,19 +52,12 @@ MtcPickPlaceNode::on_configure(const rclcpp_lifecycle::State & /*previous_state*
 
   rclcpp::NodeOptions node_options;
   node_options.automatically_declare_parameters_from_overrides(true);
+  auto overrides = get_node_parameters_interface()->get_parameter_overrides();
+  for (const auto & param : overrides) {
+    node_options.append_parameter_override(param.first, param.second);
+  }
   node_options.append_parameter_override("ompl.planning_plugin", "ompl_interface/OMPLPlanner");
   node_handle_ = rclcpp::Node::make_shared("mtc_helper_node", node_options);
-  if (!node_handle_->has_parameter("ompl.planning_plugin")) {
-    node_handle_->declare_parameter("ompl.planning_plugin", std::string("ompl_interface/OMPLPlanner"));
-  }
-
-  std::string robot_desc, robot_desc_sem;
-  if (get_parameter("robot_description", robot_desc) && !node_handle_->has_parameter("robot_description")) {
-    node_handle_->declare_parameter("robot_description", robot_desc);
-  }
-  if (get_parameter("robot_description_semantic", robot_desc_sem) && !node_handle_->has_parameter("robot_description_semantic")) {
-    node_handle_->declare_parameter("robot_description_semantic", robot_desc_sem);
-  }
 
   get_parameter("arm_group_name", arm_group_name_);
   get_parameter("hand_group_name", hand_group_name_);
@@ -235,14 +230,21 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
 
   auto cartesian_planner = std::make_shared<mtc::solvers::CartesianPath>();
   cartesian_planner->setMaxVelocityScalingFactor(max_velocity_scaling_);
-  cartesian_planner->setMaxAccelerationScalingFactor(max_acceleration_scaling_);
+  cartesian_planner->setStepSize(0.005);
 
   // Stage 1: Current State (Forward)
   auto stage_current = std::make_unique<mtc::stages::CurrentState>("Current State");
   auto stage_current_ptr = stage_current.get();
   task.add(std::move(stage_current));
 
-  // Stage 2: Connect (Links forward Current State to backward Approach)
+  // Stage 2: Allow Collision between hand/gripper and target object
+  if (!object_id.empty()) {
+    auto stage_allow_collision = std::make_unique<mtc::stages::ModifyPlanningScene>("Allow Collision (hand, object)");
+    stage_allow_collision->allowCollisions(object_id, true);
+    task.add(std::move(stage_allow_collision));
+  }
+
+  // Stage 3: Connect (Links forward Current State to backward Approach)
   auto stage_connect = std::make_unique<mtc::stages::Connect>(
     "Connect",
     mtc::stages::Connect::GroupPlannerVector{{arm_group_name_, sampling_planner}});
@@ -250,47 +252,49 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   stage_connect->properties().configureInitFrom(mtc::Stage::PARENT);
   task.add(std::move(stage_connect));
 
-  // Stage 3: Approach (Backward propagation from ComputeIK)
+  // Stage 4: Approach (Backward propagation from ComputeIK)
   auto stage_approach = std::make_unique<mtc::stages::MoveRelative>("Approach", cartesian_planner);
   stage_approach->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
   stage_approach->setIKFrame(ik_frame_);
   geometry_msgs::msg::Vector3Stamped approach_vec;
-  approach_vec.header.frame_id = ik_frame_;
-  approach_vec.vector.z = 1.0;  // Tool +Z points forward/into object
+  approach_vec.header.frame_id = world_frame_;
+  approach_vec.vector.z = -1.0;  // Move down along -Z in world frame
   stage_approach->setDirection(approach_vec);
-  stage_approach->setMinMaxDistance(0.02, 0.15);
+  stage_approach->setMinMaxDistance(0.0, 0.10);
   task.add(std::move(stage_approach));
 
-  // Stage 4: Target Pose IK Generator (Links backward approach to forward attach/retreat)
+  // Stage 5: Target Pose IK Generator (Links backward approach to forward attach/retreat)
   auto stage_pose = std::make_unique<mtc::stages::GeneratePose>("Generate Target Pose");
   stage_pose->properties().configureInitFrom(mtc::Stage::PARENT);
   stage_pose->setPose(target_pose);
   stage_pose->setMonitoredStage(stage_current_ptr);
 
   auto stage_ik = std::make_unique<mtc::stages::ComputeIK>("Grasp Pose IK", std::move(stage_pose));
-  stage_ik->setMaxIKSolutions(8);
-  stage_ik->setMinSolutionDistance(0.1);
+  stage_ik->setMaxIKSolutions(16);
+  stage_ik->setMinSolutionDistance(0.05);
   stage_ik->setIKFrame(ik_frame_);
   stage_ik->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group" });
   stage_ik->properties().configureInitFrom(mtc::Stage::INTERFACE, { "target_pose" });
+  stage_ik->properties().set("ignore_collisions", true);
   task.add(std::move(stage_ik));
 
-  // Stage 5: Attach Object (Forward propagation)
+  // Stage 6: Attach Object (Forward propagation)
   if (!object_id.empty()) {
     auto stage_attach = std::make_unique<mtc::stages::ModifyPlanningScene>("Attach");
     stage_attach->attachObject(object_id, ik_frame_);
+    stage_attach->allowCollisions(object_id, true);
     task.add(std::move(stage_attach));
   }
 
-  // Stage 6: Retreat (Forward propagation)
+  // Stage 7: Retreat (Forward propagation)
   auto stage_retreat = std::make_unique<mtc::stages::MoveRelative>("Retreat", cartesian_planner);
   stage_retreat->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
   stage_retreat->setIKFrame(ik_frame_);
   geometry_msgs::msg::Vector3Stamped retreat_vec;
   retreat_vec.header.frame_id = world_frame_;
-  retreat_vec.vector.z = 0.15;
+  retreat_vec.vector.z = 0.10;  // Move up along +Z in world
   stage_retreat->setDirection(retreat_vec);
-  stage_retreat->setMinMaxDistance(0.02, 0.2);
+  stage_retreat->setMinMaxDistance(0.001, 0.15);
   task.add(std::move(stage_retreat));
 
   return task;
@@ -319,6 +323,23 @@ void MtcPickPlaceNode::executeTask(
   publishFeedback(goal_handle, "Current State", "SUCCESS");
 
   publishFeedback(goal_handle, "Connect", "IN_PROGRESS");
+
+  if (!goal->object_id.empty()) {
+    moveit::planning_interface::PlanningSceneInterface psi;
+    moveit_msgs::msg::CollisionObject object;
+    object.header.frame_id = goal->target_pose.header.frame_id.empty() ? world_frame_ : goal->target_pose.header.frame_id;
+    object.id = goal->object_id;
+
+    shape_msgs::msg::SolidPrimitive primitive;
+    primitive.type = primitive.BOX;
+    primitive.dimensions = {0.05, 0.05, 0.05};
+
+    object.primitives.push_back(primitive);
+    object.primitive_poses.push_back(goal->target_pose.pose);
+    object.operation = object.ADD;
+
+    psi.applyCollisionObjects({object});
+  }
 
   moveit::task_constructor::Task task;
   try {
