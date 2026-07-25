@@ -39,7 +39,7 @@ void MtcPickPlaceNode::declareParameters()
   declare_parameter<std::string>("arm_group_name", "arm_1");
   declare_parameter<std::string>("hand_group_name", "arm1_hand");
   declare_parameter<std::string>("eef_name", "arm1_ee");
-  declare_parameter<std::string>("ik_frame", "arm1_tool0");
+  declare_parameter<std::string>("ik_frame", "arm1_gripper_tcp");
   declare_parameter<std::string>("world_frame", "world");
   declare_parameter<double>("max_velocity_scaling", 0.1);
   declare_parameter<double>("max_acceleration_scaling", 0.1);
@@ -132,52 +132,47 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 MtcPickPlaceNode::on_shutdown(const rclcpp_lifecycle::State & /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Shutting down MtcPickPlaceNode...");
+  action_server_.reset();
+  diagnostic_pub_.reset();
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
 void MtcPickPlaceNode::publishDiagnostics()
 {
-  if (!diagnostic_pub_) {
-    return;
-  }
-
   diagnostic_msgs::msg::DiagnosticArray diag_array;
   diag_array.header.stamp = now();
 
   diagnostic_msgs::msg::DiagnosticStatus status;
-  status.name = "birobot_manipulation: MTC Pick & Place Node";
-  status.hardware_id = "birobot_arm_cell";
+  status.name = "MtcPickPlaceNode";
+  status.hardware_id = "Birobot_Manipulation";
 
-  switch (current_state_.load()) {
+  switch (current_state_) {
     case TaskExecutionState::IDLE:
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-      status.message = "Idle - Ready for pick and place tasks";
+      status.message = "IDLE";
       break;
     case TaskExecutionState::PLANNING:
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-      status.message = "Planning MTC trajectory";
+      status.message = "PLANNING";
       break;
     case TaskExecutionState::EXECUTING:
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-      status.message = "Executing MTC trajectory";
+      status.message = "EXECUTING";
       break;
     case TaskExecutionState::SUCCESS:
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-      status.message = "Last pick and place task completed successfully";
+      status.message = "SUCCESS";
       break;
     case TaskExecutionState::FAILED:
       status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
-      status.message = "Last pick and place task failed";
+      status.message = "FAILED";
       break;
   }
 
-  diagnostic_msgs::msg::KeyValue kv_scaling;
-  kv_scaling.key = "max_velocity_scaling";
-  kv_scaling.value = std::to_string(max_velocity_scaling_);
-  status.values.push_back(kv_scaling);
-
   diag_array.status.push_back(status);
-  diagnostic_pub_->publish(diag_array);
+  if (diagnostic_pub_) {
+      diagnostic_pub_->publish(diag_array);
+  }
 }
 
 rclcpp_action::GoalResponse MtcPickPlaceNode::handleGoal(
@@ -217,10 +212,13 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
     task.loadRobotModel(node_handle_);
   }
 
+  std::string eef_name = (arm_group_name_ == "arm_2") ? "arm2_gripper" : "arm1_gripper";
+  std::string ik_frame = (arm_group_name_ == "arm_2") ? "arm2_gripper_tcp" : "arm1_gripper_tcp";
+
   task.setProperty("group", arm_group_name_);
-  task.setProperty("eef", eef_name_);
+  task.setProperty("eef", eef_name);
   task.setProperty("hand", hand_group_name_);
-  task.setProperty("ik_frame", ik_frame_);
+  task.setProperty("ik_frame", ik_frame);
 
   auto sampling_planner = node_handle_ ?
     std::make_shared<mtc::solvers::PipelinePlanner>(node_handle_, "ompl", "ompl_interface/OMPLPlanner") :
@@ -230,18 +228,26 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
 
   auto cartesian_planner = std::make_shared<mtc::solvers::CartesianPath>();
   cartesian_planner->setMaxVelocityScalingFactor(max_velocity_scaling_);
+  cartesian_planner->setMaxAccelerationScalingFactor(max_acceleration_scaling_);
   cartesian_planner->setStepSize(0.005);
+  cartesian_planner->setMinFraction(0.01);
 
   // Stage 1: Current State (Forward)
   auto stage_current = std::make_unique<mtc::stages::CurrentState>("Current State");
-  auto stage_current_ptr = stage_current.get();
+  mtc::Stage* monitored_stage_ptr = stage_current.get();
   task.add(std::move(stage_current));
 
-  // Stage 2: Allow Collision between hand/gripper/arm and target object
+  // Stage 2: Allow Collision between hand/gripper links and target object
   if (!object_id.empty()) {
     auto stage_allow_collision = std::make_unique<mtc::stages::ModifyPlanningScene>("Allow Collision");
-    stage_allow_collision->allowCollisions(object_id, *task.getRobotModel()->getJointModelGroup(arm_group_name_), true);
-    stage_allow_collision->allowCollisions(object_id, *task.getRobotModel()->getJointModelGroup(hand_group_name_), true);
+    auto robot_model = task.getRobotModel();
+    if (robot_model && robot_model->hasJointModelGroup(hand_group_name_)) {
+      const auto & hand_links = robot_model->getJointModelGroup(hand_group_name_)->getLinkModelNamesWithCollisionGeometry();
+      stage_allow_collision->allowCollisions(object_id, hand_links, true);
+    } else {
+      stage_allow_collision->allowCollisions(object_id, true);
+    }
+    monitored_stage_ptr = stage_allow_collision.get();
     task.add(std::move(stage_allow_collision));
   }
 
@@ -256,24 +262,37 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   // Stage 4: Approach (Backward propagation from ComputeIK)
   auto stage_approach = std::make_unique<mtc::stages::MoveRelative>("Approach", cartesian_planner);
   stage_approach->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-  stage_approach->setIKFrame(ik_frame_);
+  stage_approach->setIKFrame(ik_frame);
   geometry_msgs::msg::Vector3Stamped approach_vec;
-  approach_vec.header.frame_id = world_frame_;
-  approach_vec.vector.z = -1.0;  // Move down along -Z in world frame
+  approach_vec.header.frame_id = ik_frame;
+  approach_vec.vector.z = 1.0;  // Move forward along TCP +Z axis
   stage_approach->setDirection(approach_vec);
-  stage_approach->setMinMaxDistance(0.0, 0.10);
+  stage_approach->setMinMaxDistance(0.001, 0.10);
+  stage_approach->properties().set("ignore_collisions", true);
   task.add(std::move(stage_approach));
 
   // Stage 5: Target Pose IK Generator (Links backward approach to forward attach/retreat)
   auto stage_pose = std::make_unique<mtc::stages::GeneratePose>("Generate Target Pose");
   stage_pose->properties().configureInitFrom(mtc::Stage::PARENT);
-  stage_pose->setPose(target_pose);
-  stage_pose->setMonitoredStage(stage_current_ptr);
+
+  // Default to top-down grasp orientation if quaternion is invalid or zero
+  geometry_msgs::msg::PoseStamped target_pose_corrected = target_pose;
+  if (target_pose_corrected.pose.orientation.w == 0.0 &&
+      target_pose_corrected.pose.orientation.x == 0.0 &&
+      target_pose_corrected.pose.orientation.y == 0.0 &&
+      target_pose_corrected.pose.orientation.z == 0.0)
+  {
+    target_pose_corrected.pose.orientation.x = 1.0;  // 180 deg pitch/roll for top-down grasp
+    target_pose_corrected.pose.orientation.w = 0.0;
+  }
+
+  stage_pose->setPose(target_pose_corrected);
+  stage_pose->setMonitoredStage(monitored_stage_ptr);
 
   auto stage_ik = std::make_unique<mtc::stages::ComputeIK>("Grasp Pose IK", std::move(stage_pose));
-  stage_ik->setMaxIKSolutions(16);
+  stage_ik->setMaxIKSolutions(32);
   stage_ik->setMinSolutionDistance(0.05);
-  stage_ik->setIKFrame(ik_frame_);
+  stage_ik->setIKFrame(ik_frame);
   stage_ik->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group" });
   stage_ik->properties().configureInitFrom(mtc::Stage::INTERFACE, { "target_pose" });
   stage_ik->properties().set("ignore_collisions", true);
@@ -282,7 +301,7 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   // Stage 6: Attach Object (Forward propagation)
   if (!object_id.empty()) {
     auto stage_attach = std::make_unique<mtc::stages::ModifyPlanningScene>("Attach");
-    stage_attach->attachObject(object_id, ik_frame_);
+    stage_attach->attachObject(object_id, ik_frame);
     stage_attach->allowCollisions(object_id, true);
     task.add(std::move(stage_attach));
   }
@@ -290,12 +309,13 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   // Stage 7: Retreat (Forward propagation)
   auto stage_retreat = std::make_unique<mtc::stages::MoveRelative>("Retreat", cartesian_planner);
   stage_retreat->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-  stage_retreat->setIKFrame(ik_frame_);
+  stage_retreat->setIKFrame(ik_frame);
   geometry_msgs::msg::Vector3Stamped retreat_vec;
-  retreat_vec.header.frame_id = world_frame_;
-  retreat_vec.vector.z = 0.10;  // Move up along +Z in world
+  retreat_vec.header.frame_id = ik_frame;
+  retreat_vec.vector.z = -1.0;  // Move backward along TCP -Z axis
   stage_retreat->setDirection(retreat_vec);
   stage_retreat->setMinMaxDistance(0.001, 0.15);
+  stage_retreat->properties().set("ignore_collisions", true);
   task.add(std::move(stage_retreat));
 
   return task;
@@ -325,8 +345,6 @@ void MtcPickPlaceNode::executeTask(
 
   publishFeedback(goal_handle, "Connect", "IN_PROGRESS");
 
-
-
   moveit::task_constructor::Task task;
   try {
     task = createPickPlaceTask(goal->target_pose, goal->object_id);
@@ -341,28 +359,13 @@ void MtcPickPlaceNode::executeTask(
 
       shape_msgs::msg::SolidPrimitive primitive;
       primitive.type = primitive.BOX;
-      primitive.dimensions = {0.05, 0.05, 0.05};
+      primitive.dimensions = {0.15, 0.08, 0.06};
 
       object.primitives.push_back(primitive);
       object.primitive_poses.push_back(goal->target_pose.pose);
       object.operation = object.ADD;
 
       scene_msg.world.collision_objects.push_back(object);
-
-      auto robot_model = task.getRobotModel();
-      if (robot_model) {
-        std::vector<std::string> all_names;
-        all_names.push_back(goal->object_id);
-        for (const auto & name : robot_model->getLinkModelNamesWithCollisionGeometry()) {
-          all_names.push_back(name);
-        }
-
-        scene_msg.allowed_collision_matrix.entry_names = all_names;
-        scene_msg.allowed_collision_matrix.entry_values.resize(all_names.size());
-        for (size_t i = 0; i < all_names.size(); ++i) {
-          scene_msg.allowed_collision_matrix.entry_values[i].enabled.resize(all_names.size(), true);
-        }
-      }
 
       moveit::planning_interface::PlanningSceneInterface psi;
       psi.applyPlanningScene(scene_msg);
