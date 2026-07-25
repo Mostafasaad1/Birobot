@@ -256,7 +256,7 @@ moveit::task_constructor::Task MtcPickPlaceNode::createPickPlaceTask(
   stage_approach->setIKFrame(ik_frame_);
   geometry_msgs::msg::Vector3Stamped approach_vec;
   approach_vec.header.frame_id = ik_frame_;
-  approach_vec.vector.z = -0.1;
+  approach_vec.vector.z = 1.0;  // Tool +Z points forward/into object
   stage_approach->setDirection(approach_vec);
   stage_approach->setMinMaxDistance(0.02, 0.15);
   task.add(std::move(stage_approach));
