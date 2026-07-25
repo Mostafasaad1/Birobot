@@ -90,6 +90,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pca_pose_estimation test/test_pca_pose_estimation.cpp)
   target_link_libraries(test_pca_pose_estimation irregular_object_pose_estimator_lib ${PCL_LIBRARIES})
   ament_target_dependencies(test_pca_pose_estimation rclcpp rclcpp_lifecycle geometry_msgs tf2_ros)
+
+  ament_add_gtest(test_end_to_end_perception test/test_end_to_end_perception.cpp)
+  target_link_libraries(test_end_to_end_perception irregular_object_pose_estimator_lib ${PCL_LIBRARIES})
+  ament_target_dependencies(test_end_to_end_perception rclcpp rclcpp_lifecycle sensor_msgs geometry_msgs tf2_ros)
 endif()
 
 ament_package()

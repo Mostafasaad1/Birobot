@@ -51,6 +51,10 @@ public:
 
   void pointcloud_callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
 
+  int get_tracked_objects_count() const { return tracked_objects_count_; }
+  double get_last_processing_latency_ms() const { return last_processing_latency_ms_; }
+  double get_last_inlier_pct() const { return last_inlier_pct_; }
+
 private:
   void publish_diagnostics();
 
