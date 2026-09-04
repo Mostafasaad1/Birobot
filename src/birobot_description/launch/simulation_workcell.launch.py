@@ -18,8 +18,15 @@ import os
 import tempfile
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -35,7 +42,7 @@ def launch_setup(context, *args, **kwargs):
     use_rviz = LaunchConfiguration('use_rviz')
 
     pkg_share = FindPackageShare('birobot_description').find('birobot_description')
-    
+
     # Environment variable for Gazebo Sim meshes
     vendor_dir = os.path.join(pkg_share, 'vendor')
     set_gz_resource_path = SetEnvironmentVariable(
@@ -56,7 +63,9 @@ def launch_setup(context, *args, **kwargs):
         mappings={
             'sim_ignition': 'true',
             'use_fake_hardware': 'false',
-            'controllers_yaml': controllers_yaml_path if os.path.exists(controllers_yaml_path) else '',
+            'controllers_yaml': (
+                controllers_yaml_path if os.path.exists(controllers_yaml_path) else ''
+            ),
         }
     )
     robot_description_str = doc.toxml()
@@ -96,7 +105,8 @@ def launch_setup(context, *args, **kwargs):
         executable='parameter_bridge',
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-            '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            ('/birobot/depth_camera/points/points'
+             '@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked'),
             '/birobot/depth_camera/points/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
             '/birobot/depth_camera/points/image@sensor_msgs/msg/Image[gz.msgs.Image',
         ],
@@ -279,6 +289,18 @@ def launch_setup(context, *args, **kwargs):
         condition=IfCondition(use_rviz),
     )
 
+    load_controllers = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[
+                arm1_controller_spawner,
+                arm2_controller_spawner,
+                arm1_gripper_spawner,
+                arm2_gripper_spawner,
+            ],
+        )
+    )
+
     return [
         set_gz_resource_path,
         rsp_node,
@@ -288,13 +310,9 @@ def launch_setup(context, *args, **kwargs):
         spawn_object_1,
         spawn_object_2,
         joint_state_broadcaster_spawner,
-        arm1_controller_spawner,
-        arm2_controller_spawner,
-        arm1_gripper_spawner,
-        arm2_gripper_spawner,
+        load_controllers,
         rviz_node,
     ]
-
 
 
 def generate_launch_description():
