@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unified System Launch: Gazebo Sim Workcell + 3D Perception Node + RViz2 (ROS 2 Jazzy)."""
+"""Unified System Launch: Gazebo Sim Workcell + 3D Perception + RViz2."""
 
 import os
 import tempfile
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -35,8 +43,12 @@ def launch_setup(context, *args, **kwargs):
     use_rviz = LaunchConfiguration('use_rviz')
     launch_perception = LaunchConfiguration('launch_perception')
 
-    pkg_description_share = FindPackageShare('birobot_description').find('birobot_description')
-    pkg_perception_share = FindPackageShare('birobot_perception').find('birobot_perception')
+    pkg_description_share = FindPackageShare(
+        'birobot_description'
+    ).find('birobot_description')
+    pkg_perception_share = FindPackageShare(
+        'birobot_perception'
+    ).find('birobot_perception')
 
     # Environment variable for Gazebo Sim meshes
     vendor_dir = os.path.join(pkg_description_share, 'vendor')
@@ -46,19 +58,27 @@ def launch_setup(context, *args, **kwargs):
     )
 
     controllers_yaml_path = '/tmp/birobot_controllers.yaml'
-    original_controllers = os.path.join(pkg_description_share, 'config', 'controllers.yaml')
+    original_controllers = os.path.join(
+        pkg_description_share, 'config', 'controllers.yaml'
+    )
     if os.path.exists(original_controllers):
         import shutil
         shutil.copy(original_controllers, controllers_yaml_path)
 
-    xacro_file = os.path.join(pkg_description_share, 'urdf', 'birobot.urdf.xacro')
+    xacro_file = os.path.join(
+        pkg_description_share, 'urdf', 'birobot.urdf.xacro'
+    )
 
     doc = xacro.process_file(
         xacro_file,
         mappings={
             'sim_ignition': 'true',
             'use_fake_hardware': 'false',
-            'controllers_yaml': controllers_yaml_path if os.path.exists(controllers_yaml_path) else '',
+            'controllers_yaml': (
+                controllers_yaml_path
+                if os.path.exists(controllers_yaml_path)
+                else ''
+            ),
         }
     )
     robot_description_str = doc.toxml()
@@ -96,9 +116,12 @@ def launch_setup(context, *args, **kwargs):
         executable='parameter_bridge',
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-            '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
-            '/birobot/depth_camera/points/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/birobot/depth_camera/points/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            ('/birobot/depth_camera/points/points'
+             '@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked'),
+            ('/birobot/depth_camera/points/depth_image'
+             '@sensor_msgs/msg/Image[gz.msgs.Image'),
+            ('/birobot/depth_camera/points/image'
+             '@sensor_msgs/msg/Image[gz.msgs.Image'),
         ],
         output='screen'
     )
@@ -131,7 +154,8 @@ def launch_setup(context, *args, **kwargs):
           </inertial>
           <visual name="visual">
             <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
-            <material><ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material>
+            <material><ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse></material>
           </visual>
           <collision name="collision">
             <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
@@ -139,7 +163,9 @@ def launch_setup(context, *args, **kwargs):
         </link>
       </model>
     </sdf>"""
-    _obj1_tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.sdf', delete=False, prefix='obj1_')
+    _obj1_tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.sdf', delete=False, prefix='obj1_'
+    )
     _obj1_tmp.write(obj1_sdf)
     _obj1_tmp.close()
 
@@ -170,7 +196,8 @@ def launch_setup(context, *args, **kwargs):
           </inertial>
           <visual name="visual">
             <geometry><box><size>0.18 0.06 0.05</size></box></geometry>
-            <material><ambient>0 0 1 1</ambient><diffuse>0 0 1 1</diffuse></material>
+            <material><ambient>0 0 1 1</ambient>
+            <diffuse>0 0 1 1</diffuse></material>
           </visual>
           <collision name="collision">
             <geometry><box><size>0.18 0.06 0.05</size></box></geometry>
@@ -178,7 +205,9 @@ def launch_setup(context, *args, **kwargs):
         </link>
       </model>
     </sdf>"""
-    _obj2_tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.sdf', delete=False, prefix='obj2_')
+    _obj2_tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.sdf', delete=False, prefix='obj2_'
+    )
     _obj2_tmp.write(obj2_sdf)
     _obj2_tmp.close()
 
@@ -202,7 +231,12 @@ def launch_setup(context, *args, **kwargs):
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'joint_state_broadcaster',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
+        ],
         output='screen',
         parameters=[{'use_sim_time': True}],
     )
@@ -210,7 +244,12 @@ def launch_setup(context, *args, **kwargs):
     arm1_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['arm1_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'arm1_joint_trajectory_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
+        ],
         output='screen',
         parameters=[{'use_sim_time': True}],
     )
@@ -218,13 +257,46 @@ def launch_setup(context, *args, **kwargs):
     arm2_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['arm2_joint_trajectory_controller', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'arm2_joint_trajectory_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+    )
+
+    arm1_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm1_gripper_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
+        ],
+        output='screen',
+        parameters=[{'use_sim_time': True}],
+    )
+
+    arm2_gripper_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'arm2_gripper_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
+        ],
         output='screen',
         parameters=[{'use_sim_time': True}],
     )
 
     # 8. Perception Managed Lifecycle Node
-    params_file = os.path.join(pkg_perception_share, 'config', 'perception_params.yaml')
+    params_file = os.path.join(
+        pkg_perception_share, 'config', 'perception_params.yaml'
+    )
     perception_node = Node(
         package='birobot_perception',
         executable='birobot_perception_node',
@@ -235,15 +307,43 @@ def launch_setup(context, *args, **kwargs):
     )
 
     # 9. RViz2 Visualization
-    rviz_config_file = os.path.join(pkg_perception_share, 'config', 'perception.rviz')
+    rviz_config_file = os.path.join(
+        pkg_perception_share, 'config', 'perception.rviz'
+    )
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz2',
         output='screen',
-        arguments=['-d', rviz_config_file] if os.path.exists(rviz_config_file) else [],
+        arguments=['-d', rviz_config_file]
+        if os.path.exists(rviz_config_file) else [],
         parameters=[{'use_sim_time': True}],
         condition=IfCondition(use_rviz),
+    )
+
+    load_jsb = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_robot,
+            on_exit=[
+                TimerAction(
+                    period=8.0, actions=[joint_state_broadcaster_spawner]
+                )
+            ],
+        )
+    )
+
+    load_controllers_and_nodes = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[
+                arm1_controller_spawner,
+                arm2_controller_spawner,
+                arm1_gripper_spawner,
+                arm2_gripper_spawner,
+                perception_node,
+                rviz_node,
+            ],
+        )
     )
 
     return [
@@ -254,11 +354,8 @@ def launch_setup(context, *args, **kwargs):
         spawn_robot,
         spawn_object_1,
         spawn_object_2,
-        joint_state_broadcaster_spawner,
-        arm1_controller_spawner,
-        arm2_controller_spawner,
-        perception_node,
-        rviz_node,
+        load_jsb,
+        load_controllers_and_nodes,
     ]
 
 

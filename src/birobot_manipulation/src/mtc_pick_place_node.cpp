@@ -32,6 +32,13 @@ MtcPickPlaceNode::MtcPickPlaceNode(const rclcpp::NodeOptions & options)
 
 MtcPickPlaceNode::~MtcPickPlaceNode()
 {
+  helper_running_ = false;
+  if (helper_executor_) {
+    helper_executor_->cancel();
+    if (helper_thread_.joinable()) {
+      helper_thread_.join();
+    }
+  }
 }
 
 void MtcPickPlaceNode::declareParameters()
@@ -93,7 +100,13 @@ MtcPickPlaceNode::on_activate(const rclcpp_lifecycle::State & previous_state)
   if (node_handle_) {
     helper_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
     helper_executor_->add_node(node_handle_);
-    helper_thread_ = std::thread([this]() { helper_executor_->spin(); });
+    helper_running_ = true;
+    helper_thread_ = std::thread([this]() {
+      while (rclcpp::ok() && helper_running_) {
+        helper_executor_->spin_some(50ms);
+        std::this_thread::sleep_for(10ms);
+      }
+    });
   }
 
   diagnostic_timer_ = create_wall_timer(
@@ -107,6 +120,7 @@ MtcPickPlaceNode::on_deactivate(const rclcpp_lifecycle::State & previous_state)
 {
   RCLCPP_INFO(get_logger(), "Deactivating MtcPickPlaceNode...");
   diagnostic_timer_.reset();
+  helper_running_ = false;
   if (helper_executor_) {
     helper_executor_->cancel();
     if (helper_thread_.joinable()) {

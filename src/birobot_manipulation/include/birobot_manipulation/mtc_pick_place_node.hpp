@@ -99,6 +99,7 @@ private:
   rclcpp::Node::SharedPtr node_handle_;
   rclcpp::executors::SingleThreadedExecutor::SharedPtr helper_executor_;
   std::thread helper_thread_;
+  std::atomic<bool> helper_running_{false};
   std::atomic<TaskExecutionState> current_state_{TaskExecutionState::IDLE};
   rclcpp_action::Server<PickAndPlace>::SharedPtr action_server_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostic_pub_;
