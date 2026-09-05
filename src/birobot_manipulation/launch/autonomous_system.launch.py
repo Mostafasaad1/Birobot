@@ -17,7 +17,6 @@
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -27,8 +26,9 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-
 from launch_ros.actions import Node
+import xacro
+import yaml
 
 
 def generate_launch_description():
@@ -73,6 +73,37 @@ def generate_launch_description():
         condition=IfCondition(launch_perception),
     )
 
+    # Load robot model descriptions and kinematics for MoveGroupInterface
+    birobot_desc_share = get_package_share_directory('birobot_description')
+    xacro_file = os.path.join(
+        birobot_desc_share, 'urdf', 'birobot.urdf.xacro'
+    )
+    doc = xacro.process_file(
+        xacro_file,
+        mappings={
+            'sim_ignition': 'true',
+            'use_fake_hardware': 'false',
+        }
+    )
+    robot_description_str = doc.toxml()
+    robot_description = {'robot_description': robot_description_str}
+
+    srdf_file = os.path.join(pkg_moveit, 'config', 'birobot.srdf')
+    with open(srdf_file, 'r') as f:
+        robot_description_semantic = {'robot_description_semantic': f.read()}
+
+    kinematics_file = os.path.join(pkg_moveit, 'config', 'kinematics.yaml')
+    with open(kinematics_file, 'r') as f:
+        robot_description_kinematics = {
+            'robot_description_kinematics': yaml.safe_load(f)
+        }
+
+    joint_limits_file = os.path.join(pkg_moveit, 'config', 'joint_limits.yaml')
+    with open(joint_limits_file, 'r') as f:
+        robot_description_planning = {
+            'robot_description_planning': yaml.safe_load(f)
+        }
+
     # 3. BehaviorTree.CPP v4 Mission Coordinator
     bt_xml_file = os.path.join(
         pkg_manipulation, 'config', 'bt_trees', 'collaborative_handover.xml'
@@ -83,6 +114,10 @@ def generate_launch_description():
         name='birobot_bt_coordinator',
         output='screen',
         parameters=[
+            robot_description,
+            robot_description_semantic,
+            robot_description_kinematics,
+            robot_description_planning,
             {'bt_xml_file': bt_xml_file},
             {'use_sim_time': True},
         ],
