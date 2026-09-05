@@ -10,6 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "std_msgs/msg/empty.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -87,6 +88,9 @@ private:
   rclcpp::Node::SharedPtr node_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm1_hand_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm2_hand_;
+  std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> psi_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm1_detach_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm2_detach_pub_;
   std::future<moveit::core::MoveItErrorCode> execution_future_;
 };
 
@@ -119,6 +123,8 @@ private:
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm1_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm2_;
   std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> psi_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm1_attach_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm2_attach_pub_;
   std::future<moveit::core::MoveItErrorCode> execution_future_;
   std::string current_object_id_;
 };
@@ -155,7 +161,7 @@ private:
 };
 
 /**
- * @brief TransferOwnershipNode: Updates MoveIt Planning Scene to transfer object attachment.
+ * @brief TransferOwnershipNode: Updates MoveIt Planning Scene and Gazebo to transfer object attachment.
  */
 class TransferOwnershipNode : public BT::SyncActionNode
 {
@@ -179,6 +185,8 @@ public:
 private:
   rclcpp::Node::SharedPtr node_;
   std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> psi_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm1_detach_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm2_attach_pub_;
 };
 
 /**

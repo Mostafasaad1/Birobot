@@ -306,5 +306,26 @@
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_1_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_2_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_3_link" reason="Never"/>
+
+    <!-- Inter-Gripper Handover Collisions -->
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_gripper_tcp" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_gripper_tcp" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_gripper_tcp" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_gripper_tcp" reason="Never"/>
 </robot>
 

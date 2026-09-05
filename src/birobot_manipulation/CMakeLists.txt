@@ -23,6 +23,7 @@ find_package(behaviortree_cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(control_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 include_directories(
   include
@@ -79,6 +80,7 @@ ament_target_dependencies(handover_bt_nodes_lib
   moveit_ros_planning_interface
   tf2_ros
   behaviortree_cpp
+  std_msgs
 )
 
 add_executable(birobot_bt_coordinator_node

@@ -221,22 +221,26 @@ bool IrregularObjectPoseEstimator::compute_cluster_pose(
     return false;
   }
 
-  // Eigenvectors sorted by ascending eigenvalue. Col(2) is primary axis.
+  // Eigenvectors sorted by ascending eigenvalue. Col(2) is primary axis (longest dimension).
   Eigen::Vector3f primary_axis = eigensolver.eigenvectors().col(2);
 
-  // Project primary axis onto XY plane for yaw orientation
-  Eigen::Vector3f x_gripper = primary_axis;
-  x_gripper.z() = 0.0f;
-  if (x_gripper.norm() < 1e-4f) {
-    x_gripper = Eigen::Vector3f::UnitX();
+  // Project primary axis onto XY plane for length orientation
+  // Gripper Y aligns with the object length. Gripper X (finger opening)
+  // aligns with the object width so that the 0.115m gripper can grasp the 0.08m width.
+  Eigen::Vector3f y_gripper = primary_axis;
+  y_gripper.z() = 0.0f;
+  if (y_gripper.norm() < 1e-4f) {
+    y_gripper = Eigen::Vector3f::UnitY();
   } else {
-    x_gripper.normalize();
+    y_gripper.normalize();
   }
 
-  // Approach Z constrained downward
+  // Approach Z constrained downward (into table)
   Eigen::Vector3f z_gripper(0.0f, 0.0f, -1.0f);
-  Eigen::Vector3f y_gripper = z_gripper.cross(x_gripper).normalized();
-  x_gripper = y_gripper.cross(z_gripper).normalized();
+  // Finger opening/closing axis (X) perpendicular to length (aligned with object width)
+  Eigen::Vector3f x_gripper = y_gripper.cross(z_gripper).normalized();
+  // Ensure right-handed orthogonal frame: x cross y = z
+  y_gripper = z_gripper.cross(x_gripper).normalized();
 
   Eigen::Matrix3f rot_matrix;
   rot_matrix.col(0) = x_gripper;
