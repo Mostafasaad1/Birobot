@@ -24,6 +24,7 @@ from launch.actions import (
     OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
+    TimerAction,
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
@@ -294,6 +295,15 @@ def launch_setup(context, *args, **kwargs):
         condition=IfCondition(use_rviz),
     )
 
+    load_jsb = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_robot,
+            on_exit=[
+                TimerAction(period=8.0, actions=[joint_state_broadcaster_spawner])
+            ],
+        )
+    )
+
     load_controllers = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -302,6 +312,7 @@ def launch_setup(context, *args, **kwargs):
                 arm2_controller_spawner,
                 arm1_gripper_spawner,
                 arm2_gripper_spawner,
+                rviz_node,
             ],
         )
     )
@@ -314,9 +325,8 @@ def launch_setup(context, *args, **kwargs):
         spawn_robot,
         spawn_object_1,
         spawn_object_2,
-        joint_state_broadcaster_spawner,
+        load_jsb,
         load_controllers,
-        rviz_node,
     ]
 
 
