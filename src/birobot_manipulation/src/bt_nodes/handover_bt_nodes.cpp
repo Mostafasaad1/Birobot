@@ -197,19 +197,12 @@ BT::NodeStatus ArmPickMtcNode::onStart()
   getInput("target_pose", target_pose);
   current_object_id_ = object_id;
 
-  std::string ik_frame = (arm_name == "arm_2") ? "arm2_gripper_tcp" : "arm1_gripper_tcp";
-
-  // Validate or fix orientation if zero/uninitialized
-  if (std::abs(target_pose.pose.orientation.w) < 1e-4 &&
-      std::abs(target_pose.pose.orientation.x) < 1e-4 &&
-      std::abs(target_pose.pose.orientation.y) < 1e-4 &&
-      std::abs(target_pose.pose.orientation.z) < 1e-4)
-  {
-    target_pose.pose.orientation.x = 0.5523;
-    target_pose.pose.orientation.y = 0.8336;
-    target_pose.pose.orientation.z = 0.0;
-    target_pose.pose.orientation.w = 0.0;
+  // Ensure frame_id is set
+  if (target_pose.header.frame_id.empty()) {
+    target_pose.header.frame_id = "world";
   }
+
+  std::string ik_frame = (arm_name == "arm_2") ? "arm2_gripper_tcp" : "arm1_gripper_tcp";
 
   RCLCPP_INFO(
     node_->get_logger(),
@@ -223,11 +216,12 @@ BT::NodeStatus ArmPickMtcNode::onStart()
     {
       auto arm_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
       arm_group->setEndEffectorLink(ik_frame);
-      arm_group->setPlanningTime(5.0);
-      arm_group->setNumPlanningAttempts(5);
+      arm_group->setPlanningTime(15.0);
+      arm_group->setNumPlanningAttempts(20);
+      arm_group->setGoalPositionTolerance(0.005);
+      arm_group->setGoalOrientationTolerance(0.1);
       arm_group->setMaxVelocityScalingFactor(0.3);
       arm_group->setMaxAccelerationScalingFactor(0.3);
-      arm_group->setWorkspace(-1.5, -1.5, 0.0, 1.5, 1.5, 2.0);
 
       std::string hand_group = (arm_name == "arm_2") ? "arm2_hand" : "arm1_hand";
       auto hand_group_interface = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, hand_group);
@@ -242,33 +236,85 @@ BT::NodeStatus ArmPickMtcNode::onStart()
         hand_group_interface->execute(open_plan);
       }
 
-      // 2. Pre-grasp approach (15 cm above target pose)
+      // 2. Pre-grasp approach with multiple candidate orientations
+      // UR10e at x=-0.6m (arm1) or x=+0.6m (arm2) tries orientations in order of preference.
+      // Top-down grasps: 180° roll, various yaw offsets to try multiple IK solutions.
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 2: Planning pre-grasp approach...");
+
       geometry_msgs::msg::PoseStamped pre_grasp = target_pose;
       pre_grasp.pose.position.z += 0.15;
-      arm_group->setPoseTarget(pre_grasp, ik_frame);
 
+      // Candidate grasp orientations (all are top-down, varying yaw for IK reachability)
+      // q = (sin(roll/2)*cos(yaw/2), sin(roll/2)*sin(yaw/2), 0, cos(roll/2)*cos(yaw/2))
+      // where roll=pi, so sin(roll/2)=1, cos(roll/2)=0
+      // q = (cos(yaw/2), sin(yaw/2), 0, 0)
+      struct GraspCandidate {
+        double qx, qy, qz, qw;
+        const char* label;
+      };
+      std::vector<GraspCandidate> candidates = {
+        { 1.0,   0.0,   0.0, 0.0,  "top-down yaw=0" },
+        { 0.707, 0.707, 0.0, 0.0,  "top-down yaw=pi/2" },
+        { 0.0,   1.0,   0.0, 0.0,  "top-down yaw=pi" },
+        { 0.707,-0.707, 0.0, 0.0,  "top-down yaw=-pi/2" },
+        { 0.924, 0.383, 0.0, 0.0,  "top-down yaw=pi/4" },
+        { 0.383, 0.924, 0.0, 0.0,  "top-down yaw=3pi/4" },
+      };
+
+      moveit::core::MoveItErrorCode err = moveit::core::MoveItErrorCode::FAILURE;
       moveit::planning_interface::MoveGroupInterface::Plan approach_plan;
-      auto err = arm_group->plan(approach_plan);
+      geometry_msgs::msg::Pose chosen_pre_grasp_pose;
+
+      for (const auto& cand : candidates) {
+        pre_grasp.pose.orientation.x = cand.qx;
+        pre_grasp.pose.orientation.y = cand.qy;
+        pre_grasp.pose.orientation.z = cand.qz;
+        pre_grasp.pose.orientation.w = cand.qw;
+
+        RCLCPP_INFO(
+          node_->get_logger(),
+          "[BT:ArmPickMtc] Trying pre-grasp orientation: %s", cand.label);
+
+        arm_group->setPoseTarget(pre_grasp, ik_frame);
+        err = arm_group->plan(approach_plan);
+        if (err == moveit::core::MoveItErrorCode::SUCCESS) {
+          chosen_pre_grasp_pose = pre_grasp.pose;
+          RCLCPP_INFO(
+            node_->get_logger(),
+            "[BT:ArmPickMtc] Pre-grasp orientation succeeded: %s", cand.label);
+          break;
+        }
+        arm_group->clearPoseTargets();
+      }
+
       if (err != moveit::core::MoveItErrorCode::SUCCESS) {
-        RCLCPP_WARN(node_->get_logger(), "[BT:ArmPickMtc] Pre-grasp planning failed for '%s'", arm_name.c_str());
+        RCLCPP_WARN(node_->get_logger(), "[BT:ArmPickMtc] All pre-grasp orientations failed for '%s'", arm_name.c_str());
         return err;
       }
+
       err = arm_group->execute(approach_plan);
       if (err != moveit::core::MoveItErrorCode::SUCCESS) {
         RCLCPP_WARN(node_->get_logger(), "[BT:ArmPickMtc] Pre-grasp execution failed");
         return err;
       }
 
-      // 3. Descend to grasp pose (target_pose)
+      // 3. Descend to grasp pose using Cartesian path (keep same orientation)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 3: Descending to grasp pose...");
-      std::vector<geometry_msgs::msg::Pose> waypoints_down = { target_pose.pose };
+      geometry_msgs::msg::Pose grasp_pose = target_pose.pose;
+      grasp_pose.orientation = chosen_pre_grasp_pose.orientation;
+
+      std::vector<geometry_msgs::msg::Pose> waypoints_down = { grasp_pose };
       moveit_msgs::msg::RobotTrajectory trajectory_down;
       double fraction_down = arm_group->computeCartesianPath(waypoints_down, 0.005, trajectory_down, false);
       if (fraction_down > 0.5) {
+        RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Cartesian descent fraction: %.2f", fraction_down);
         err = arm_group->execute(trajectory_down);
       } else {
-        arm_group->setPoseTarget(target_pose, ik_frame);
+        RCLCPP_WARN(node_->get_logger(), "[BT:ArmPickMtc] Cartesian path fraction %.2f < 0.5, using joint planning", fraction_down);
+        geometry_msgs::msg::PoseStamped grasp_stamped;
+        grasp_stamped.header = target_pose.header;
+        grasp_stamped.pose = grasp_pose;
+        arm_group->setPoseTarget(grasp_stamped, ik_frame);
         err = arm_group->move();
       }
       if (err != moveit::core::MoveItErrorCode::SUCCESS) {
@@ -283,8 +329,9 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       if (hand_group_interface->plan(close_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
         hand_group_interface->execute(close_plan);
       }
+      std::this_thread::sleep_for(200ms);
 
-      // 5. Attach in Gazebo Sim (DetachableJoint system)
+      // 5. Attach in Gazebo Sim physics (DetachableJoint system)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Binding object in Gazebo Sim physics...");
       std_msgs::msg::Empty empty_msg;
       if (arm_name == "arm_2") {
@@ -294,36 +341,52 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       }
 
       // 6. Attach in MoveIt Planning Scene with touch links
+      //    IMPORTANT: first remove the standalone collision object so the planner
+      //    does not see it as a free body colliding with the workcell.
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 6: Attaching object in MoveIt Planning Scene...");
+
+      // 6a. Remove standalone object from the world
+      psi_->removeCollisionObjects({object_id});
+      std::this_thread::sleep_for(100ms);  // let the scene update propagate
+
+      // 6b. Build and apply the attached collision object
       moveit_msgs::msg::AttachedCollisionObject attached_obj;
       attached_obj.link_name = ik_frame;
       attached_obj.object.id = object_id;
-      attached_obj.object.header.frame_id = "world";
+      attached_obj.object.header.frame_id = ik_frame;   // pose relative to TCP now
       attached_obj.object.operation = attached_obj.object.ADD;
 
       shape_msgs::msg::SolidPrimitive primitive;
       primitive.type = primitive.BOX;
       primitive.dimensions = {0.15, 0.08, 0.06};
       attached_obj.object.primitives.push_back(primitive);
-      attached_obj.object.primitive_poses.push_back(target_pose.pose);
 
+      // Object sits at TCP origin (centred in gripper)
+      geometry_msgs::msg::Pose local_pose;
+      local_pose.orientation.w = 1.0;
+      attached_obj.object.primitive_poses.push_back(local_pose);
+
+      // Allow collisions with every gripper and workcell surface link
       attached_obj.touch_links = {
         arm_name + "_gripper_base_link",
         arm_name + "_gripper_left_finger",
         arm_name + "_gripper_right_finger",
-        arm_name + "_gripper_tcp"
+        arm_name + "_gripper_tcp",
+        "workcell_base_link",
+        "table_link"
       };
       psi_->applyAttachedCollisionObject(attached_obj);
+      std::this_thread::sleep_for(200ms);  // wait for planning scene sync
 
       // 7. Retreat / Lift up with payload (+15 cm Z)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 7: Lifting payload to retreat pose...");
-      std::vector<geometry_msgs::msg::Pose> waypoints_up = { pre_grasp.pose };
+      std::vector<geometry_msgs::msg::Pose> waypoints_up = { chosen_pre_grasp_pose };
       moveit_msgs::msg::RobotTrajectory trajectory_up;
       double fraction_up = arm_group->computeCartesianPath(waypoints_up, 0.005, trajectory_up, false);
       if (fraction_up > 0.5) {
         err = arm_group->execute(trajectory_up);
       } else {
-        arm_group->setPoseTarget(pre_grasp, ik_frame);
+        arm_group->setPoseTarget(chosen_pre_grasp_pose, ik_frame);
         err = arm_group->move();
       }
 

@@ -159,14 +159,14 @@
         <render_engine>ogre2</render_engine>
       </plugin>
       <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
-        <parent_link>arm1_gripper_base_link</parent_link>
+        <parent_link>arm1_wrist_3_link</parent_link>
         <child_model>irregular_object_1</child_model>
         <child_link>link</child_link>
         <attach_topic>/arm1/attach</attach_topic>
         <detach_topic>/arm1/detach</detach_topic>
       </plugin>
       <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
-        <parent_link>arm2_gripper_base_link</parent_link>
+        <parent_link>arm2_wrist_3_link</parent_link>
         <child_model>irregular_object_1</child_model>
         <child_link>link</child_link>
         <attach_topic>/arm2/attach</attach_topic>
