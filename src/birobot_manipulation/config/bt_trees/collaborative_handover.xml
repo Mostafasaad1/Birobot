@@ -11,11 +11,11 @@
       <!-- 3. Arm 1 picks the irregular object using MTC pipeline -->
       <ArmPickMtc arm="arm_1" object_id="{object_id}" target_pose="{target_pose}"/>
 
-      <!-- 4. Both arms move to collaborative mid-air handover rendezvous -->
-      <Parallel success_count="2" failure_count="1">
-        <MoveNamedPose arm="arm_1" named_pose="handover"/>
-        <MoveNamedPose arm="arm_2" named_pose="handover"/>
-      </Parallel>
+      <!-- 4. Arm 1 transports payload to collaborative mid-air handover rendezvous -->
+      <MoveNamedPose arm="arm_1" named_pose="handover"/>
+
+      <!-- 5. Arm 2 moves to rendezvous position to receive payload -->
+      <MoveNamedPose arm="arm_2" named_pose="handover"/>
 
       <!-- 5. Arm 2 closes gripper onto object in mid-air -->
       <GripperControl gripper="arm2" action="close"/>

@@ -295,15 +295,23 @@ def generate_launch_description():
             '/arm2/detach@std_msgs/msg/Empty]gz.msgs.Empty',
         ],
         parameters=[{
-            # Set QoS for all ROS-side topics in this bridge instance
+            # Set QoS for all ROS-side topics in this bridge instance (both pub and sub)
             'qos_overrides./arm1/attach.publisher.durability': 'transient_local',
             'qos_overrides./arm1/attach.publisher.reliability': 'reliable',
+            'qos_overrides./arm1/attach.subscription.durability': 'transient_local',
+            'qos_overrides./arm1/attach.subscription.reliability': 'reliable',
             'qos_overrides./arm1/detach.publisher.durability': 'transient_local',
             'qos_overrides./arm1/detach.publisher.reliability': 'reliable',
+            'qos_overrides./arm1/detach.subscription.durability': 'transient_local',
+            'qos_overrides./arm1/detach.subscription.reliability': 'reliable',
             'qos_overrides./arm2/attach.publisher.durability': 'transient_local',
             'qos_overrides./arm2/attach.publisher.reliability': 'reliable',
+            'qos_overrides./arm2/attach.subscription.durability': 'transient_local',
+            'qos_overrides./arm2/attach.subscription.reliability': 'reliable',
             'qos_overrides./arm2/detach.publisher.durability': 'transient_local',
             'qos_overrides./arm2/detach.publisher.reliability': 'reliable',
+            'qos_overrides./arm2/detach.subscription.durability': 'transient_local',
+            'qos_overrides./arm2/detach.subscription.reliability': 'reliable',
         }],
         output='screen'
     )

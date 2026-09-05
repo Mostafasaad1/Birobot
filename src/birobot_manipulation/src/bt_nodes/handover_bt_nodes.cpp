@@ -5,6 +5,9 @@
 #include <thread>
 #include <chrono>
 
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+
 #include <moveit_msgs/msg/attached_collision_object.hpp>
 #include <moveit_msgs/msg/collision_object.hpp>
 #include <shape_msgs/msg/solid_primitive.hpp>
@@ -142,14 +145,16 @@ BT::NodeStatus GripperControlNode::onStart()
       if (!psi_) {
         psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
       }
-      // Remove from attached scene — object now free in the world
+      // Remove from attached scene and clear from world — object is deposited into bin
       moveit_msgs::msg::AttachedCollisionObject detach_obj;
       detach_obj.link_name = "arm2_gripper_tcp";
       detach_obj.object.id = "irregular_object_1";
       detach_obj.object.operation = detach_obj.object.REMOVE;
       psi_->applyAttachedCollisionObject(detach_obj);
+      psi_->removeCollisionObjects({"irregular_object_1"});
+      std::this_thread::sleep_for(150ms);
       RCLCPP_INFO(node_->get_logger(),
-        "[BT:GripperControl] Released payload from arm2 in Gazebo Sim and MoveIt Planning Scene");
+        "[BT:GripperControl] Released and cleared payload from arm2 in Gazebo Sim and MoveIt Planning Scene");
     } else {
       // Arm 1 open at handover — physics detach already done by TransferOwnership,
       // but send a cleanup burst anyway in case it was missed
@@ -162,14 +167,31 @@ BT::NodeStatus GripperControlNode::onStart()
   }
 
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);
-  move_group->setPlanningTime(5.0);
-  move_group->setNumPlanningAttempts(5);
+  move_group->setPlanningTime(10.0);
+  move_group->setNumPlanningAttempts(10);
   move_group->setMaxVelocityScalingFactor(0.5);
   move_group->setMaxAccelerationScalingFactor(0.5);
-  move_group->setNamedTarget(target_name);
+
+  if (action == "close" || action == "closed") {
+    // Grip object gently without crushing: object width = 0.08m -> joint = 0.0225m
+    std::vector<double> grip_joints = {0.0225, 0.0225};
+    move_group->setJointValueTarget(grip_joints);
+  } else {
+    move_group->setNamedTarget("open");
+  }
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
-  bool success = (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+  bool success = false;
+  for (int attempt = 1; attempt <= 3 && !success; ++attempt) {
+    if (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+      success = true;
+    } else {
+      RCLCPP_WARN(node_->get_logger(),
+        "[BT:GripperControl] Plan attempt %d for '%s' failed, retrying in 500ms...",
+        attempt, group_name.c_str());
+      std::this_thread::sleep_for(500ms);
+    }
+  }
   if (!success) {
     RCLCPP_WARN(node_->get_logger(), "[BT:GripperControl] Failed to plan gripper motion for '%s'", group_name.c_str());
     return BT::NodeStatus::FAILURE;
@@ -263,23 +285,38 @@ BT::NodeStatus ArmPickMtcNode::onStart()
     prim.dimensions = {0.15, 0.08, 0.06};
     world_obj.primitives.push_back(prim);
 
+    // Derive object yaw dynamically from detected perception orientation
+    tf2::Quaternion q_perc(
+      target_pose.pose.orientation.x,
+      target_pose.pose.orientation.y,
+      target_pose.pose.orientation.z,
+      target_pose.pose.orientation.w);
+    if (q_perc.length2() < 1e-6) {
+      q_perc.setValue(0.5525, 0.8335, 0.0, 0.0);
+    }
+    q_perc.normalize();
+    tf2::Matrix3x3 rot(q_perc);
+    // In irregular_object_pose_estimator.cpp, Col(1) (gripper Y) is aligned with object length
+    double obj_yaw = std::atan2(rot[1][1], rot[0][1]);
+    tf2::Quaternion q_box;
+    q_box.setRPY(0.0, 0.0, obj_yaw);
+
     // Use the detected pose (world frame) for the collision object placement
     geometry_msgs::msg::Pose obj_pose;
     obj_pose.position.x = target_pose.pose.position.x;
     obj_pose.position.y = target_pose.pose.position.y;
     // Object bottom is at table surface (z=0.05), centre at z=0.08
-    obj_pose.position.z = 0.08;
-    // Object yaw = 0.4 rad → quaternion (0, 0, sin(0.2), cos(0.2))
-    obj_pose.orientation.x = 0.0;
-    obj_pose.orientation.y = 0.0;
-    obj_pose.orientation.z = 0.1987;
-    obj_pose.orientation.w = 0.9801;
+    obj_pose.position.z = 0.080;
+    obj_pose.orientation.x = q_box.x();
+    obj_pose.orientation.y = q_box.y();
+    obj_pose.orientation.z = q_box.z();
+    obj_pose.orientation.w = q_box.w();
     world_obj.primitive_poses.push_back(obj_pose);
 
     psi_->applyCollisionObjects({world_obj});
     RCLCPP_INFO(node_->get_logger(),
-      "[BT:ArmPickMtc] Registered '%s' in MoveIt world scene at (%.3f, %.3f, %.3f)",
-      object_id.c_str(), obj_pose.position.x, obj_pose.position.y, obj_pose.position.z);
+      "[BT:ArmPickMtc] Registered '%s' in MoveIt world scene at (%.3f, %.3f, %.3f) with dynamic yaw %.3f rad",
+      object_id.c_str(), obj_pose.position.x, obj_pose.position.y, obj_pose.position.z, obj_yaw);
     std::this_thread::sleep_for(200ms);  // let planning scene sync
   }
 
@@ -310,24 +347,41 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       }
 
       // 2. Pre-grasp approach with candidate orientations aligned with object width (0.08m)
-      // Object yaw is 0.4 rad in Gazebo, so width is at theta = 0.4 + pi/2 ~ 1.9708 rad.
-      // Gripper fingers open/close along TCP X-axis (gap=0.115m).
-      // Candidate 1: top-down with finger opening along width (qx=0.5525, qy=0.8335)
-      // Candidate 2: top-down with 180° flip along width (qx=0.8335, qy=-0.5525)
+      // Dynamic candidate orientations derived from live 3D perception
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 2: Planning pre-grasp approach...");
 
       geometry_msgs::msg::PoseStamped pre_grasp = target_pose;
       pre_grasp.pose.position.z += 0.15;
 
+      tf2::Quaternion q_base(
+        target_pose.pose.orientation.x,
+        target_pose.pose.orientation.y,
+        target_pose.pose.orientation.z,
+        target_pose.pose.orientation.w);
+      if (q_base.length2() < 1e-6) {
+        q_base.setValue(0.5525, 0.8335, 0.0, 0.0);
+      }
+      q_base.normalize();
+
+      // 180° flip around TCP Z axis
+      tf2::Quaternion q_z180(0.0, 0.0, 1.0, 0.0);
+      tf2::Quaternion q_flip = (q_base * q_z180).normalized();
+
+      // Small yaw perturbations (+/- 15 deg) around TCP Z for IK flexibility
+      tf2::Quaternion q_p15; q_p15.setRPY(0.0, 0.0, 0.2618);
+      tf2::Quaternion q_m15; q_m15.setRPY(0.0, 0.0, -0.2618);
+
       struct GraspCandidate {
-        double qx, qy, qz, qw;
+        tf2::Quaternion q;
         const char* label;
       };
       std::vector<GraspCandidate> candidates = {
-        {  0.5525,  0.8335, 0.0, 0.0, "width-aligned (theta = 0.4 + pi/2)" },
-        {  0.8335, -0.5525, 0.0, 0.0, "width-aligned (180° flip)" },
-        {  0.4472,  0.8944, 0.0, 0.0, "width-aligned (+15° tolerance)" },
-        {  0.6428,  0.7660, 0.0, 0.0, "width-aligned (-15° tolerance)" },
+        { q_base, "perception 3D PCA orientation" },
+        { q_flip, "perception orientation (180° flip)" },
+        { (q_base * q_p15).normalized(), "perception orientation (+15° tolerance)" },
+        { (q_base * q_m15).normalized(), "perception orientation (-15° tolerance)" },
+        { (q_flip * q_p15).normalized(), "perception 180° flip (+15° tolerance)" },
+        { (q_flip * q_m15).normalized(), "perception 180° flip (-15° tolerance)" },
       };
 
       moveit::core::MoveItErrorCode err = moveit::core::MoveItErrorCode::FAILURE;
@@ -335,10 +389,10 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       geometry_msgs::msg::Pose chosen_pre_grasp_pose;
 
       for (const auto& cand : candidates) {
-        pre_grasp.pose.orientation.x = cand.qx;
-        pre_grasp.pose.orientation.y = cand.qy;
-        pre_grasp.pose.orientation.z = cand.qz;
-        pre_grasp.pose.orientation.w = cand.qw;
+        pre_grasp.pose.orientation.x = cand.q.x();
+        pre_grasp.pose.orientation.y = cand.q.y();
+        pre_grasp.pose.orientation.z = cand.q.z();
+        pre_grasp.pose.orientation.w = cand.q.w();
 
         RCLCPP_INFO(
           node_->get_logger(),
@@ -371,9 +425,8 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 3: Descending to grasp pose...");
       geometry_msgs::msg::Pose grasp_pose = target_pose.pose;
       grasp_pose.orientation = chosen_pre_grasp_pose.orientation;
-      if (grasp_pose.position.z > 0.075) {
-        grasp_pose.position.z = 0.075;
-      }
+      // Object sits on table (z=0.05), height=0.06 -> center at z=0.080
+      grasp_pose.position.z = 0.080;
 
       std::vector<geometry_msgs::msg::Pose> waypoints_down = { grasp_pose };
       moveit_msgs::msg::RobotTrajectory trajectory_down;
@@ -394,19 +447,11 @@ BT::NodeStatus ArmPickMtcNode::onStart()
         return err;
       }
 
-      // 4. Close gripper firmly around object
-      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 4: Closing gripper around object...");
-      hand_group_interface->setNamedTarget("closed");
-      moveit::planning_interface::MoveGroupInterface::Plan close_plan;
-      if (hand_group_interface->plan(close_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-        hand_group_interface->execute(close_plan);
-      }
-      std::this_thread::sleep_for(300ms);
-
-      // 5. Attach in Gazebo Sim physics (DetachableJoint system)
-      // CRITICAL: Publishers use transient_local QoS so bridge gets the message even if
-      // it connects after publish. Send 30-message burst over 2s to be absolutely sure.
-      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Binding object in Gazebo Sim physics...");
+      // 4. Attach in Gazebo Sim physics (DetachableJoint system) FIRST
+      // At this moment, the arm is at the grasp pose with fingers open around the payload.
+      // Attaching now pins the object to arm wrist link at the true grasp pose,
+      // preventing the fingers from knocking or shooting the object across the table.
+      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 4: Binding object in Gazebo Sim physics...");
       std_msgs::msg::Empty empty_msg;
       for (int i = 0; i < 30; ++i) {
         if (arm_name == "arm_2") {
@@ -416,8 +461,19 @@ BT::NodeStatus ArmPickMtcNode::onStart()
         }
         std::this_thread::sleep_for(30ms);
       }
-      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Physics attach burst complete (30 msgs × 30ms)");
-      std::this_thread::sleep_for(500ms);  // extra wait for physics stabilisation
+      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 4: Physics attach burst complete (30 msgs × 30ms)");
+      std::this_thread::sleep_for(200ms);
+
+      // 5. Close gripper fingers to contact object (width = 0.08m -> joint position = 0.0225m)
+      // Do NOT command "closed" (0.0m) which crushes the 80mm object into 35mm gap.
+      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Closing gripper to touch payload...");
+      std::vector<double> grip_joints = {0.0225, 0.0225};
+      hand_group_interface->setJointValueTarget(grip_joints);
+      moveit::planning_interface::MoveGroupInterface::Plan close_plan;
+      if (hand_group_interface->plan(close_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+        hand_group_interface->execute(close_plan);
+      }
+      std::this_thread::sleep_for(300ms);
 
       // 6. Attach in MoveIt Planning Scene with touch links
       //    IMPORTANT: first remove the standalone collision object so the planner
@@ -527,14 +583,28 @@ BT::NodeStatus MoveNamedPoseNode::onStart()
     arm_name.c_str(), named_pose.c_str());
 
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
-  move_group->setPlanningTime(5.0);
-  move_group->setNumPlanningAttempts(5);
-  move_group->setMaxVelocityScalingFactor(0.2);
-  move_group->setMaxAccelerationScalingFactor(0.2);
+  move_group->setPlanningTime(10.0);
+  move_group->setNumPlanningAttempts(15);
+  move_group->setMaxVelocityScalingFactor(0.25);
+  move_group->setMaxAccelerationScalingFactor(0.25);
   move_group->setNamedTarget(named_pose);
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
-  bool success = (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
+  bool success = false;
+  for (int attempt = 1; attempt <= 3 && !success; ++attempt) {
+    if (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+      success = true;
+      RCLCPP_INFO(node_->get_logger(),
+        "[BT:MoveNamedPose] Trajectory to '%s' planned successfully for '%s' (attempt %d)",
+        named_pose.c_str(), arm_name.c_str(), attempt);
+    } else {
+      RCLCPP_WARN(node_->get_logger(),
+        "[BT:MoveNamedPose] Plan attempt %d to '%s' failed for '%s', retrying in 500ms...",
+        attempt, named_pose.c_str(), arm_name.c_str());
+      std::this_thread::sleep_for(500ms);
+    }
+  }
+
   if (!success) {
     RCLCPP_WARN(node_->get_logger(), "[BT:MoveNamedPose] Failed to plan trajectory to '%s' for '%s'", named_pose.c_str(), arm_name.c_str());
     return BT::NodeStatus::FAILURE;

@@ -49,10 +49,10 @@
         <joint name="arm1_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="arm_1">
-        <joint name="arm1_shoulder_pan_joint" value="0.0"/>
-        <joint name="arm1_shoulder_lift_joint" value="-1.0472"/>
-        <joint name="arm1_elbow_joint" value="1.3963"/>
-        <joint name="arm1_wrist_1_joint" value="-1.9198"/>
+        <joint name="arm1_shoulder_pan_joint" value="-0.2945"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.6733"/>
+        <joint name="arm1_elbow_joint" value="2.1137"/>
+        <joint name="arm1_wrist_1_joint" value="-2.0112"/>
         <joint name="arm1_wrist_2_joint" value="-1.5708"/>
         <joint name="arm1_wrist_3_joint" value="0.0"/>
     </group_state>
@@ -65,18 +65,18 @@
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="arm_2">
-        <joint name="arm2_shoulder_pan_joint" value="0.0"/>
-        <joint name="arm2_shoulder_lift_joint" value="-1.0472"/>
-        <joint name="arm2_elbow_joint" value="1.3963"/>
-        <joint name="arm2_wrist_1_joint" value="-1.9198"/>
+        <joint name="arm2_shoulder_pan_joint" value="-0.2945"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.6733"/>
+        <joint name="arm2_elbow_joint" value="2.1137"/>
+        <joint name="arm2_wrist_1_joint" value="-2.0112"/>
         <joint name="arm2_wrist_2_joint" value="-1.5708"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
     <group_state name="drop_off" group="arm_2">
-        <joint name="arm2_shoulder_pan_joint" value="-0.7854"/>
-        <joint name="arm2_shoulder_lift_joint" value="-1.2217"/>
-        <joint name="arm2_elbow_joint" value="1.5708"/>
-        <joint name="arm2_wrist_1_joint" value="-1.9198"/>
+        <joint name="arm2_shoulder_pan_joint" value="0.1221"/>
+        <joint name="arm2_shoulder_lift_joint" value="-2.3566"/>
+        <joint name="arm2_elbow_joint" value="2.7089"/>
+        <joint name="arm2_wrist_1_joint" value="-1.9231"/>
         <joint name="arm2_wrist_2_joint" value="-1.5708"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
@@ -95,16 +95,16 @@
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="dual_arms">
-        <joint name="arm1_shoulder_pan_joint" value="0.0"/>
-        <joint name="arm1_shoulder_lift_joint" value="-1.0472"/>
-        <joint name="arm1_elbow_joint" value="1.3963"/>
-        <joint name="arm1_wrist_1_joint" value="-1.9198"/>
+        <joint name="arm1_shoulder_pan_joint" value="-0.2945"/>
+        <joint name="arm1_shoulder_lift_joint" value="-1.6733"/>
+        <joint name="arm1_elbow_joint" value="2.1137"/>
+        <joint name="arm1_wrist_1_joint" value="-2.0112"/>
         <joint name="arm1_wrist_2_joint" value="-1.5708"/>
         <joint name="arm1_wrist_3_joint" value="0.0"/>
-        <joint name="arm2_shoulder_pan_joint" value="0.0"/>
-        <joint name="arm2_shoulder_lift_joint" value="-1.0472"/>
-        <joint name="arm2_elbow_joint" value="1.3963"/>
-        <joint name="arm2_wrist_1_joint" value="-1.9198"/>
+        <joint name="arm2_shoulder_pan_joint" value="-0.2945"/>
+        <joint name="arm2_shoulder_lift_joint" value="-1.6733"/>
+        <joint name="arm2_elbow_joint" value="2.1137"/>
+        <joint name="arm2_wrist_1_joint" value="-2.0112"/>
         <joint name="arm2_wrist_2_joint" value="-1.5708"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
@@ -299,6 +299,18 @@
     <disable_collisions link1="arm1_wrist_3_link" link2="arm2_wrist_2_link" reason="Never"/>
     <disable_collisions link1="arm1_wrist_3_link" link2="arm2_wrist_3_link" reason="Never"/>
 
+    <!-- Inter-Arm Wrist & Gripper Collisions (Handover Rendezvous) -->
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_wrist_3_link" reason="Never"/>
+
+    <!-- Arm 1 Gripper vs Arm 2 Links -->
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_base_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_shoulder_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_upper_arm_link" reason="Never"/>
@@ -306,6 +318,63 @@
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_1_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_2_link" reason="Never"/>
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_flange" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_base_link" link2="arm2_tool0" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_upper_arm_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_forearm_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_flange" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_left_finger" link2="arm2_tool0" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_upper_arm_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_forearm_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_flange" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_right_finger" link2="arm2_tool0" reason="Never"/>
+
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_wrist_1_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_wrist_2_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_wrist_3_link" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_flange" reason="Never"/>
+    <disable_collisions link1="arm1_gripper_tcp" link2="arm2_tool0" reason="Never"/>
+
+    <!-- Arm 2 Gripper vs Arm 1 Links -->
+    <disable_collisions link1="arm1_base_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_shoulder_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_upper_arm_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_forearm_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_flange" link2="arm2_gripper_base_link" reason="Never"/>
+    <disable_collisions link1="arm1_tool0" link2="arm2_gripper_base_link" reason="Never"/>
+
+    <disable_collisions link1="arm1_upper_arm_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_forearm_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_flange" link2="arm2_gripper_left_finger" reason="Never"/>
+    <disable_collisions link1="arm1_tool0" link2="arm2_gripper_left_finger" reason="Never"/>
+
+    <disable_collisions link1="arm1_upper_arm_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_forearm_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_flange" link2="arm2_gripper_right_finger" reason="Never"/>
+    <disable_collisions link1="arm1_tool0" link2="arm2_gripper_right_finger" reason="Never"/>
+
+    <disable_collisions link1="arm1_wrist_1_link" link2="arm2_gripper_tcp" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_2_link" link2="arm2_gripper_tcp" reason="Never"/>
+    <disable_collisions link1="arm1_wrist_3_link" link2="arm2_gripper_tcp" reason="Never"/>
+    <disable_collisions link1="arm1_flange" link2="arm2_gripper_tcp" reason="Never"/>
+    <disable_collisions link1="arm1_tool0" link2="arm2_gripper_tcp" reason="Never"/>
 
     <!-- Inter-Gripper Handover Collisions -->
     <disable_collisions link1="arm1_gripper_base_link" link2="arm2_gripper_base_link" reason="Never"/>
