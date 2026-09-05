@@ -59,14 +59,16 @@ BT::NodeStatus DetectObjectNode::tick()
 
   if (!tf_found) {
     // Fallback: Use canonical table surface position for irregular_object_1
+    // Table surface is at z=0.05, object is from z=0.05 to z=0.11 (center at 0.08).
+    // Target TCP at z=0.075 places finger tips at z=0.065, securely grasping the 0.08m width.
     detected_pose.pose.position.x = 0.10;
     detected_pose.pose.position.y = 0.05;
-    detected_pose.pose.position.z = 0.08;
+    detected_pose.pose.position.z = 0.075;
     // Top-down grasp orientation aligned with object width (0.08m)
     // Object yaw is 0.4 rad in Gazebo, so width is along yaw 0.4 + pi/2 ~ 1.9708 rad.
     // Quaternion for roll=pi, pitch=0, yaw=1.9708 rad:
-    detected_pose.pose.orientation.x = 0.5523;
-    detected_pose.pose.orientation.y = 0.8336;
+    detected_pose.pose.orientation.x = 0.5525;
+    detected_pose.pose.orientation.y = 0.8335;
     detected_pose.pose.orientation.z = 0.0;
     detected_pose.pose.orientation.w = 0.0;
     RCLCPP_INFO(
@@ -113,7 +115,10 @@ BT::NodeStatus GripperControlNode::onStart()
   if (action == "open") {
     std_msgs::msg::Empty empty_msg;
     if (gripper == "arm2" || gripper == "arm2_gripper") {
-      arm2_detach_pub_->publish(empty_msg);
+      for (int i = 0; i < 10; ++i) {
+        arm2_detach_pub_->publish(empty_msg);
+        std::this_thread::sleep_for(20ms);
+      }
       if (!psi_) {
         psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
       }
@@ -124,7 +129,10 @@ BT::NodeStatus GripperControlNode::onStart()
       psi_->applyAttachedCollisionObject(detach_obj);
       RCLCPP_INFO(node_->get_logger(), "[BT:GripperControl] Released payload in Gazebo Sim and MoveIt Planning Scene");
     } else {
-      arm1_detach_pub_->publish(empty_msg);
+      for (int i = 0; i < 10; ++i) {
+        arm1_detach_pub_->publish(empty_msg);
+        std::this_thread::sleep_for(20ms);
+      }
     }
   }
 
@@ -236,29 +244,25 @@ BT::NodeStatus ArmPickMtcNode::onStart()
         hand_group_interface->execute(open_plan);
       }
 
-      // 2. Pre-grasp approach with multiple candidate orientations
-      // UR10e at x=-0.6m (arm1) or x=+0.6m (arm2) tries orientations in order of preference.
-      // Top-down grasps: 180° roll, various yaw offsets to try multiple IK solutions.
+      // 2. Pre-grasp approach with candidate orientations aligned with object width (0.08m)
+      // Object yaw is 0.4 rad in Gazebo, so width is at theta = 0.4 + pi/2 ~ 1.9708 rad.
+      // Gripper fingers open/close along TCP X-axis (gap=0.115m).
+      // Candidate 1: top-down with finger opening along width (qx=0.5525, qy=0.8335)
+      // Candidate 2: top-down with 180° flip along width (qx=0.8335, qy=-0.5525)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 2: Planning pre-grasp approach...");
 
       geometry_msgs::msg::PoseStamped pre_grasp = target_pose;
       pre_grasp.pose.position.z += 0.15;
 
-      // Candidate grasp orientations (all are top-down, varying yaw for IK reachability)
-      // q = (sin(roll/2)*cos(yaw/2), sin(roll/2)*sin(yaw/2), 0, cos(roll/2)*cos(yaw/2))
-      // where roll=pi, so sin(roll/2)=1, cos(roll/2)=0
-      // q = (cos(yaw/2), sin(yaw/2), 0, 0)
       struct GraspCandidate {
         double qx, qy, qz, qw;
         const char* label;
       };
       std::vector<GraspCandidate> candidates = {
-        { 1.0,   0.0,   0.0, 0.0,  "top-down yaw=0" },
-        { 0.707, 0.707, 0.0, 0.0,  "top-down yaw=pi/2" },
-        { 0.0,   1.0,   0.0, 0.0,  "top-down yaw=pi" },
-        { 0.707,-0.707, 0.0, 0.0,  "top-down yaw=-pi/2" },
-        { 0.924, 0.383, 0.0, 0.0,  "top-down yaw=pi/4" },
-        { 0.383, 0.924, 0.0, 0.0,  "top-down yaw=3pi/4" },
+        {  0.5525,  0.8335, 0.0, 0.0, "width-aligned (theta = 0.4 + pi/2)" },
+        {  0.8335, -0.5525, 0.0, 0.0, "width-aligned (180° flip)" },
+        {  0.4472,  0.8944, 0.0, 0.0, "width-aligned (+15° tolerance)" },
+        {  0.6428,  0.7660, 0.0, 0.0, "width-aligned (-15° tolerance)" },
       };
 
       moveit::core::MoveItErrorCode err = moveit::core::MoveItErrorCode::FAILURE;
@@ -302,6 +306,9 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 3: Descending to grasp pose...");
       geometry_msgs::msg::Pose grasp_pose = target_pose.pose;
       grasp_pose.orientation = chosen_pre_grasp_pose.orientation;
+      if (grasp_pose.position.z > 0.075) {
+        grasp_pose.position.z = 0.075;
+      }
 
       std::vector<geometry_msgs::msg::Pose> waypoints_down = { grasp_pose };
       moveit_msgs::msg::RobotTrajectory trajectory_down;
@@ -329,16 +336,21 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       if (hand_group_interface->plan(close_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
         hand_group_interface->execute(close_plan);
       }
-      std::this_thread::sleep_for(200ms);
+      std::this_thread::sleep_for(300ms);
 
       // 5. Attach in Gazebo Sim physics (DetachableJoint system)
+      // Send burst of Empty messages across ROS-Gz bridge to ensure reliable attachment
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Binding object in Gazebo Sim physics...");
       std_msgs::msg::Empty empty_msg;
-      if (arm_name == "arm_2") {
-        arm2_attach_pub_->publish(empty_msg);
-      } else {
-        arm1_attach_pub_->publish(empty_msg);
+      for (int i = 0; i < 10; ++i) {
+        if (arm_name == "arm_2") {
+          arm2_attach_pub_->publish(empty_msg);
+        } else {
+          arm1_attach_pub_->publish(empty_msg);
+        }
+        std::this_thread::sleep_for(20ms);
       }
+      std::this_thread::sleep_for(200ms);
 
       // 6. Attach in MoveIt Planning Scene with touch links
       //    IMPORTANT: first remove the standalone collision object so the planner
@@ -366,12 +378,20 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       local_pose.orientation.w = 1.0;
       attached_obj.object.primitive_poses.push_back(local_pose);
 
-      // Allow collisions with every gripper and workcell surface link
+      // Allow collisions with every gripper link and workcell surface link
       attached_obj.touch_links = {
-        arm_name + "_gripper_base_link",
-        arm_name + "_gripper_left_finger",
-        arm_name + "_gripper_right_finger",
-        arm_name + "_gripper_tcp",
+        "arm1_gripper_base_link",
+        "arm1_gripper_left_finger",
+        "arm1_gripper_right_finger",
+        "arm1_gripper_tcp",
+        "arm1_wrist_3_link",
+        "arm1_tool0",
+        "arm2_gripper_base_link",
+        "arm2_gripper_left_finger",
+        "arm2_gripper_right_finger",
+        "arm2_gripper_tcp",
+        "arm2_wrist_3_link",
+        "arm2_tool0",
         "workcell_base_link",
         "table_link"
       };
@@ -521,11 +541,14 @@ BT::NodeStatus TransferOwnershipNode::tick()
 
   // 2. Gazebo Physics Handover: Detach Arm 1, Attach Arm 2
   std_msgs::msg::Empty empty_msg;
-  arm1_detach_pub_->publish(empty_msg);
-  arm2_attach_pub_->publish(empty_msg);
+  for (int i = 0; i < 10; ++i) {
+    arm1_detach_pub_->publish(empty_msg);
+    arm2_attach_pub_->publish(empty_msg);
+    std::this_thread::sleep_for(20ms);
+  }
 
-  // Small delay for planning scene synchronization
-  std::this_thread::sleep_for(100ms);
+  // Delay for planning scene and physics synchronization
+  std::this_thread::sleep_for(200ms);
 
   // 3. MoveIt Attach to destination link with touch links
   moveit_msgs::msg::AttachedCollisionObject attach_obj;
@@ -533,10 +556,20 @@ BT::NodeStatus TransferOwnershipNode::tick()
   attach_obj.object.id = object_id;
   attach_obj.object.operation = attach_obj.object.ADD;
   attach_obj.touch_links = {
+    "arm1_gripper_base_link",
+    "arm1_gripper_left_finger",
+    "arm1_gripper_right_finger",
+    "arm1_gripper_tcp",
+    "arm1_wrist_3_link",
+    "arm1_tool0",
     "arm2_gripper_base_link",
     "arm2_gripper_left_finger",
     "arm2_gripper_right_finger",
-    "arm2_gripper_tcp"
+    "arm2_gripper_tcp",
+    "arm2_wrist_3_link",
+    "arm2_tool0",
+    "workcell_base_link",
+    "table_link"
   };
   psi_->applyAttachedCollisionObject(attach_obj);
 

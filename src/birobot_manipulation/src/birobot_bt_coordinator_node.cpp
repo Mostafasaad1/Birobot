@@ -76,10 +76,10 @@ int main(int argc, char ** argv)
 
   // Wait for all arm trajectory and gripper action servers to become active
   std::vector<std::string> action_servers = {
-    "arm1_joint_trajectory_controller/follow_joint_trajectory",
-    "arm2_joint_trajectory_controller/follow_joint_trajectory",
-    "arm1_gripper_controller/follow_joint_trajectory",
-    "arm2_gripper_controller/follow_joint_trajectory"
+    "/arm1_joint_trajectory_controller/follow_joint_trajectory",
+    "/arm2_joint_trajectory_controller/follow_joint_trajectory",
+    "/arm1_gripper_controller/follow_joint_trajectory",
+    "/arm2_gripper_controller/follow_joint_trajectory"
   };
 
   for (const auto & action_name : action_servers) {
