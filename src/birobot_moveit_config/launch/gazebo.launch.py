@@ -217,6 +217,58 @@ def generate_launch_description():
         output='screen',
     )
 
+    bin_sdf = """<sdf version="1.6">
+      <model name="drop_off_bin">
+        <static>true</static>
+        <pose>0 0 0 0 0 0</pose>
+        <link name="bin_link">
+          <visual name="bottom">
+            <pose>0 0 0.01 0 0 0</pose>
+            <geometry><box><size>0.24 0.18 0.02</size></box></geometry>
+            <material><ambient>0.2 0.8 0.2 1</ambient><diffuse>0.2 0.8 0.2 1</diffuse></material>
+          </visual>
+          <collision name="bottom_col">
+            <pose>0 0 0.01 0 0 0</pose>
+            <geometry><box><size>0.24 0.18 0.02</size></box></geometry>
+          </collision>
+          <visual name="wall_front">
+            <pose>0 0.09 0.05 0 0 0</pose>
+            <geometry><box><size>0.24 0.02 0.08</size></box></geometry>
+            <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+          </visual>
+          <visual name="wall_back">
+            <pose>0 -0.09 0.05 0 0 0</pose>
+            <geometry><box><size>0.24 0.02 0.08</size></box></geometry>
+            <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+          </visual>
+          <visual name="wall_left">
+            <pose>-0.12 0 0.05 0 0 0</pose>
+            <geometry><box><size>0.02 0.18 0.08</size></box></geometry>
+            <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+          </visual>
+          <visual name="wall_right">
+            <pose>0.12 0 0.05 0 0 0</pose>
+            <geometry><box><size>0.02 0.18 0.08</size></box></geometry>
+            <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+          </visual>
+        </link>
+      </model>
+    </sdf>"""
+
+    spawn_bin = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-string', bin_sdf,
+            '-name', 'drop_off_bin',
+            '-world', 'empty',
+            '-x', '0.40',
+            '-y', '-0.20',
+            '-z', '0.05',
+        ],
+        output='screen',
+    )
+
     # Parameter Bridge (Gazebo Sim -> ROS 2)
     clock_bridge = Node(
         package='ros_gz_bridge',
@@ -364,6 +416,7 @@ def generate_launch_description():
         spawn_entity,
         spawn_object_1,
         spawn_object_2,
+        spawn_bin,
         robot_state_publisher,
         load_jsb,
         load_arm_controllers_and_moveit,

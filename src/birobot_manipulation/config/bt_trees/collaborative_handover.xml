@@ -1,0 +1,40 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="CollaborativeHandoverTree">
+    <Sequence name="CollaborativeHandoverSequence">
+      <!-- 1. Detect irregular object from 3D perception -->
+      <DetectObject target_pose="{target_pose}" object_id="{object_id}"/>
+
+      <!-- 2. Ensure initial state: open both grippers -->
+      <GripperControl gripper="arm1" action="open"/>
+      <GripperControl gripper="arm2" action="open"/>
+
+      <!-- 3. Arm 1 picks the irregular object using MTC pipeline -->
+      <ArmPickMtc arm="arm_1" object_id="{object_id}" target_pose="{target_pose}"/>
+
+      <!-- 4. Both arms move to collaborative mid-air handover rendezvous -->
+      <Parallel success_count="2" failure_count="1">
+        <MoveNamedPose arm="arm_1" named_pose="handover"/>
+        <MoveNamedPose arm="arm_2" named_pose="handover"/>
+      </Parallel>
+
+      <!-- 5. Arm 2 closes gripper onto object in mid-air -->
+      <GripperControl gripper="arm2" action="close"/>
+
+      <!-- 6. Planning Scene atomic ownership transfer: detach from Arm 1, attach to Arm 2 -->
+      <TransferOwnership object_id="{object_id}" from_link="arm1_gripper_tcp" to_link="arm2_gripper_tcp"/>
+
+      <!-- 7. Arm 1 releases and retreats to home -->
+      <GripperControl gripper="arm1" action="open"/>
+      <MoveNamedPose arm="arm_1" named_pose="home"/>
+
+      <!-- 8. Arm 2 transports payload to drop-off bin -->
+      <MoveNamedPose arm="arm_2" named_pose="drop_off"/>
+
+      <!-- 9. Arm 2 deposits payload into drop-off bin -->
+      <GripperControl gripper="arm2" action="open"/>
+
+      <!-- 10. Arm 2 returns to home -->
+      <MoveNamedPose arm="arm_2" named_pose="home"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

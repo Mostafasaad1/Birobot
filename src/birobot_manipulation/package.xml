@@ -21,6 +21,7 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>moveit_task_constructor_core</depend>
   <depend>birobot_interfaces</depend>
+  <depend>behaviortree_cpp</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
 

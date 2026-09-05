@@ -19,6 +19,9 @@ find_package(moveit_ros_planning REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_task_constructor_core REQUIRED)
 find_package(birobot_interfaces REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 include_directories(
   include
@@ -58,7 +61,43 @@ ament_target_dependencies(mtc_pick_place_node
   rclcpp_lifecycle
 )
 
-install(TARGETS mtc_pick_place_lib mtc_pick_place_node
+# ── BehaviorTree.CPP v4 Handover Nodes & Coordinator ──────────────────────────
+add_library(handover_bt_nodes_lib SHARED
+  src/bt_nodes/handover_bt_nodes.cpp
+)
+target_include_directories(handover_bt_nodes_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(handover_bt_nodes_lib
+  rclcpp
+  geometry_msgs
+  shape_msgs
+  moveit_core
+  moveit_ros_planning
+  moveit_ros_planning_interface
+  tf2_ros
+  behaviortree_cpp
+)
+
+add_executable(birobot_bt_coordinator_node
+  src/birobot_bt_coordinator_node.cpp
+)
+target_link_libraries(birobot_bt_coordinator_node
+  handover_bt_nodes_lib
+)
+ament_target_dependencies(birobot_bt_coordinator_node
+  rclcpp
+  ament_index_cpp
+  tf2_ros
+  behaviortree_cpp
+)
+
+install(TARGETS
+  mtc_pick_place_lib
+  mtc_pick_place_node
+  handover_bt_nodes_lib
+  birobot_bt_coordinator_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -72,11 +111,19 @@ install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
+)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_mtc_pipeline test/test_mtc_pipeline.cpp)
   target_link_libraries(test_mtc_pipeline mtc_pick_place_lib)
   ament_target_dependencies(test_mtc_pipeline rclcpp rclcpp_lifecycle birobot_interfaces)
+
+  ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
+  target_link_libraries(test_bt_nodes handover_bt_nodes_lib)
+  ament_target_dependencies(test_bt_nodes rclcpp tf2_ros behaviortree_cpp)
 endif()
 
 ament_package()
