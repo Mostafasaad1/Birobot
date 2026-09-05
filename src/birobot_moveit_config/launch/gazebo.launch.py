@@ -269,18 +269,42 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Parameter Bridge (Gazebo Sim -> ROS 2)
+    # Parameter Bridge — clock and sensor data (bidirectional @, one-way [ or ])
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+        ],
+        output='screen'
+    )
+
+    # Dedicated bridge for attach/detach signals with TRANSIENT_LOCAL QoS.
+    # The DetachableJoint plugin fires on the first message; if the bridge misses it
+    # due to startup ordering, the object is never constrained.
+    # transient_local durability causes the bridge to store the last message and
+    # replay it to Gazebo's plugin as soon as the sim-side subscriber connects.
+    attach_detach_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
             '/arm1/attach@std_msgs/msg/Empty]gz.msgs.Empty',
             '/arm1/detach@std_msgs/msg/Empty]gz.msgs.Empty',
             '/arm2/attach@std_msgs/msg/Empty]gz.msgs.Empty',
             '/arm2/detach@std_msgs/msg/Empty]gz.msgs.Empty',
         ],
+        parameters=[{
+            # Set QoS for all ROS-side topics in this bridge instance
+            'qos_overrides./arm1/attach.publisher.durability': 'transient_local',
+            'qos_overrides./arm1/attach.publisher.reliability': 'reliable',
+            'qos_overrides./arm1/detach.publisher.durability': 'transient_local',
+            'qos_overrides./arm1/detach.publisher.reliability': 'reliable',
+            'qos_overrides./arm2/attach.publisher.durability': 'transient_local',
+            'qos_overrides./arm2/attach.publisher.reliability': 'reliable',
+            'qos_overrides./arm2/detach.publisher.durability': 'transient_local',
+            'qos_overrides./arm2/detach.publisher.reliability': 'reliable',
+        }],
         output='screen'
     )
 
@@ -417,6 +441,7 @@ def generate_launch_description():
         set_gz_resource_path,
         gazebo_sim,
         clock_bridge,
+        attach_detach_bridge,
         spawn_entity,
         spawn_object_1,
         spawn_object_2,

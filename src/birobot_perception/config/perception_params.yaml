@@ -2,10 +2,16 @@ birobot_perception_node:
   ros__parameters:
     input_cloud_topic: "/birobot/depth_camera/points/points"
     target_frame: "world"
-    ransac_distance_threshold: 0.015
+    # RANSAC: threshold must be tight enough to segment the table plane only.
+    # At 2.5m camera height the object (6cm tall) is well above the table.
+    # 0.015m was swallowing the object into the inlier set; use 0.010m for tighter fit.
+    ransac_distance_threshold: 0.010
     ransac_max_iterations: 1000
-    cluster_tolerance: 0.02
-    min_cluster_size: 50
+    # Cluster tolerance of 0.025m allows points on the object surface to group together
+    # at the ~307k point resolution of the depth image from 2.5m height.
+    cluster_tolerance: 0.025
+    # Reduced from 50 to 10 to detect sparse clusters on top of the object
+    min_cluster_size: 10
     max_cluster_size: 25000
     max_tracked_objects: 2
     target_tf_prefix: "grasp_target_"

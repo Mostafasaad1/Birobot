@@ -36,44 +36,56 @@ BT::NodeStatus DetectObjectNode::tick()
   detected_pose.header.stamp = node_->now();
   std::string target_id = "irregular_object_1";
 
+  // Retry TF lookup for up to 10 seconds to allow perception pipeline to start
   bool tf_found = false;
   if (tf_buffer_) {
-    try {
-      // Check for dynamic grasp target frame published by birobot_perception
-      if (tf_buffer_->canTransform("world", "grasp_target_1", tf2::TimePointZero, 100ms)) {
-        auto tf = tf_buffer_->lookupTransform("world", "grasp_target_1", tf2::TimePointZero);
-        detected_pose.pose.position.x = tf.transform.translation.x;
-        detected_pose.pose.position.y = tf.transform.translation.y;
-        detected_pose.pose.position.z = tf.transform.translation.z;
-        detected_pose.pose.orientation = tf.transform.rotation;
-        tf_found = true;
-        RCLCPP_INFO(
-          node_->get_logger(),
-          "[BT:DetectObject] Resolved dynamic grasp_target_1 from CV: (%.3f, %.3f, %.3f)",
-          detected_pose.pose.position.x, detected_pose.pose.position.y, detected_pose.pose.position.z);
+    const int max_polls = 100;   // 100 * 100ms = 10 seconds
+    for (int poll = 0; poll < max_polls && !tf_found; ++poll) {
+      try {
+        if (tf_buffer_->canTransform("world", "grasp_target_1", tf2::TimePointZero, 100ms)) {
+          auto tf = tf_buffer_->lookupTransform("world", "grasp_target_1", tf2::TimePointZero);
+          detected_pose.pose.position.x = tf.transform.translation.x;
+          detected_pose.pose.position.y = tf.transform.translation.y;
+          detected_pose.pose.position.z = tf.transform.translation.z;
+          detected_pose.pose.orientation = tf.transform.rotation;
+          tf_found = true;
+          RCLCPP_INFO(
+            node_->get_logger(),
+            "[BT:DetectObject] Resolved dynamic grasp_target_1 from 3D perception: (%.3f, %.3f, %.3f) after %d polls",
+            detected_pose.pose.position.x, detected_pose.pose.position.y,
+            detected_pose.pose.position.z, poll + 1);
+        } else {
+          if (poll % 10 == 0) {
+            RCLCPP_INFO(node_->get_logger(),
+              "[BT:DetectObject] Waiting for perception TF 'grasp_target_1' (%d/100)...", poll + 1);
+          }
+          std::this_thread::sleep_for(100ms);
+        }
+      } catch (const tf2::TransformException & ex) {
+        RCLCPP_DEBUG(node_->get_logger(), "[BT:DetectObject] TF lookup attempt %d failed: %s", poll, ex.what());
+        std::this_thread::sleep_for(100ms);
       }
-    } catch (const tf2::TransformException & ex) {
-      RCLCPP_DEBUG(node_->get_logger(), "[BT:DetectObject] TF lookup failed: %s", ex.what());
     }
   }
 
   if (!tf_found) {
-    // Fallback: Use canonical table surface position for irregular_object_1
-    // Table surface is at z=0.05, object is from z=0.05 to z=0.11 (center at 0.08).
-    // Target TCP at z=0.075 places finger tips at z=0.065, securely grasping the 0.08m width.
+    // Fallback: Use canonical table surface position matching gazebo.launch.py spawn args:
+    // -x 0.10 -y 0.05 -z 0.08 -Y 0.4
+    // Table surface is at z=0.05, object sits from z=0.05 to z=0.11 (centre at 0.08).
+    // TCP target z=0.075 places finger tips at z=0.065, grasping the 0.08m width.
     detected_pose.pose.position.x = 0.10;
     detected_pose.pose.position.y = 0.05;
     detected_pose.pose.position.z = 0.075;
-    // Top-down grasp orientation aligned with object width (0.08m)
-    // Object yaw is 0.4 rad in Gazebo, so width is along yaw 0.4 + pi/2 ~ 1.9708 rad.
-    // Quaternion for roll=pi, pitch=0, yaw=1.9708 rad:
+    // Width-aligned top-down orientation: object yaw=0.4 rad → grasp yaw = 0.4 + pi/2 = 1.9708 rad
+    // q = (sin(pi/2)*cos(yaw/2), sin(pi/2)*sin(yaw/2), 0, 0) = (cos(yaw/2), sin(yaw/2), 0, 0)
     detected_pose.pose.orientation.x = 0.5525;
     detected_pose.pose.orientation.y = 0.8335;
     detected_pose.pose.orientation.z = 0.0;
     detected_pose.pose.orientation.w = 0.0;
-    RCLCPP_INFO(
+    RCLCPP_WARN(
       node_->get_logger(),
-      "[BT:DetectObject] Using canonical object pose: (%.3f, %.3f, %.3f)",
+      "[BT:DetectObject] *** PERCEPTION TIMEOUT: 3D detection did not find object after 10s. "
+      "Using HARDCODED pose (%.3f, %.3f, %.3f). Check perception pipeline! ***",
       detected_pose.pose.position.x, detected_pose.pose.position.y, detected_pose.pose.position.z);
   }
 
@@ -92,8 +104,9 @@ GripperControlNode::GripperControlNode(
   node_(node),
   psi_(nullptr)
 {
-  arm1_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/detach", 10);
-  arm2_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/detach", 10);
+  auto qos_tl = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+  arm1_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/detach", qos_tl);
+  arm2_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/detach", qos_tl);
 }
 
 BT::NodeStatus GripperControlNode::onStart()
@@ -111,27 +124,39 @@ BT::NodeStatus GripperControlNode::onStart()
   std::string group_name = (gripper == "arm2" || gripper == "arm2_gripper") ? "arm2_hand" : "arm1_hand";
   std::string target_name = (action == "close" || action == "closed") ? "closed" : "open";
 
-  // Handle Gazebo and MoveIt detach if opening gripper at drop-off
+  // Handle Gazebo and MoveIt detach if opening gripper
+  // NOTE: arm2 open at drop-off physically releases the object into the bin.
+  //       arm1 open at handover releases grip after TransferOwnership.
   if (action == "open") {
     std_msgs::msg::Empty empty_msg;
     if (gripper == "arm2" || gripper == "arm2_gripper") {
-      for (int i = 0; i < 10; ++i) {
+      // First open fingers in hardware, THEN send physics detach
+      // (detach fires AFTER the gripper motion starts below, so order matters —
+      //  we send the detach burst first so Gazebo gets it right as fingers open)
+      RCLCPP_INFO(node_->get_logger(), "[BT:GripperControl] Sending physics detach burst for arm2...");
+      for (int i = 0; i < 30; ++i) {
         arm2_detach_pub_->publish(empty_msg);
-        std::this_thread::sleep_for(20ms);
+        std::this_thread::sleep_for(30ms);
       }
+      std::this_thread::sleep_for(200ms);
       if (!psi_) {
         psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
       }
+      // Remove from attached scene — object now free in the world
       moveit_msgs::msg::AttachedCollisionObject detach_obj;
       detach_obj.link_name = "arm2_gripper_tcp";
       detach_obj.object.id = "irregular_object_1";
       detach_obj.object.operation = detach_obj.object.REMOVE;
       psi_->applyAttachedCollisionObject(detach_obj);
-      RCLCPP_INFO(node_->get_logger(), "[BT:GripperControl] Released payload in Gazebo Sim and MoveIt Planning Scene");
+      RCLCPP_INFO(node_->get_logger(),
+        "[BT:GripperControl] Released payload from arm2 in Gazebo Sim and MoveIt Planning Scene");
     } else {
+      // Arm 1 open at handover — physics detach already done by TransferOwnership,
+      // but send a cleanup burst anyway in case it was missed
+      RCLCPP_INFO(node_->get_logger(), "[BT:GripperControl] Sending physics detach cleanup burst for arm1...");
       for (int i = 0; i < 10; ++i) {
         arm1_detach_pub_->publish(empty_msg);
-        std::this_thread::sleep_for(20ms);
+        std::this_thread::sleep_for(30ms);
       }
     }
   }
@@ -187,8 +212,13 @@ ArmPickMtcNode::ArmPickMtcNode(
   node_(node),
   psi_(nullptr)
 {
-  arm1_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/attach", 10);
-  arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", 10);
+  // TRANSIENT_LOCAL: messages are stored and replayed to late-joining subscribers
+  // (ros_gz_bridge connects after this node; volatile QoS would silently drop messages)
+  auto qos_tl = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+  arm1_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/attach", qos_tl);
+  arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", qos_tl);
+  // Give ros_gz_bridge time to connect and receive the transient-local message
+  std::this_thread::sleep_for(1000ms);
 }
 
 BT::NodeStatus ArmPickMtcNode::onStart()
@@ -217,6 +247,41 @@ BT::NodeStatus ArmPickMtcNode::onStart()
     "[BT:ArmPickMtc] Arm '%s' initiating staged pick on '%s' at (%.3f, %.3f, %.3f)",
     arm_name.c_str(), object_id.c_str(),
     target_pose.pose.position.x, target_pose.pose.position.y, target_pose.pose.position.z);
+
+  // ── PRE-PICK: Register object in MoveIt world scene ──────────────────────
+  // This MUST happen before any planning so MoveIt knows the object exists.
+  // Without this, removeCollisionObjects() is a no-op and applyAttachedCollisionObject
+  // creates a phantom object that only exists in the planning scene, not in physics.
+  {
+    moveit_msgs::msg::CollisionObject world_obj;
+    world_obj.header.frame_id = "world";
+    world_obj.id = object_id;
+    world_obj.operation = world_obj.ADD;
+
+    shape_msgs::msg::SolidPrimitive prim;
+    prim.type = prim.BOX;
+    prim.dimensions = {0.15, 0.08, 0.06};
+    world_obj.primitives.push_back(prim);
+
+    // Use the detected pose (world frame) for the collision object placement
+    geometry_msgs::msg::Pose obj_pose;
+    obj_pose.position.x = target_pose.pose.position.x;
+    obj_pose.position.y = target_pose.pose.position.y;
+    // Object bottom is at table surface (z=0.05), centre at z=0.08
+    obj_pose.position.z = 0.08;
+    // Object yaw = 0.4 rad → quaternion (0, 0, sin(0.2), cos(0.2))
+    obj_pose.orientation.x = 0.0;
+    obj_pose.orientation.y = 0.0;
+    obj_pose.orientation.z = 0.1987;
+    obj_pose.orientation.w = 0.9801;
+    world_obj.primitive_poses.push_back(obj_pose);
+
+    psi_->applyCollisionObjects({world_obj});
+    RCLCPP_INFO(node_->get_logger(),
+      "[BT:ArmPickMtc] Registered '%s' in MoveIt world scene at (%.3f, %.3f, %.3f)",
+      object_id.c_str(), obj_pose.position.x, obj_pose.position.y, obj_pose.position.z);
+    std::this_thread::sleep_for(200ms);  // let planning scene sync
+  }
 
   execution_future_ = std::async(
     std::launch::async,
@@ -339,18 +404,20 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       std::this_thread::sleep_for(300ms);
 
       // 5. Attach in Gazebo Sim physics (DetachableJoint system)
-      // Send burst of Empty messages across ROS-Gz bridge to ensure reliable attachment
+      // CRITICAL: Publishers use transient_local QoS so bridge gets the message even if
+      // it connects after publish. Send 30-message burst over 2s to be absolutely sure.
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Binding object in Gazebo Sim physics...");
       std_msgs::msg::Empty empty_msg;
-      for (int i = 0; i < 10; ++i) {
+      for (int i = 0; i < 30; ++i) {
         if (arm_name == "arm_2") {
           arm2_attach_pub_->publish(empty_msg);
         } else {
           arm1_attach_pub_->publish(empty_msg);
         }
-        std::this_thread::sleep_for(20ms);
+        std::this_thread::sleep_for(30ms);
       }
-      std::this_thread::sleep_for(200ms);
+      RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 5: Physics attach burst complete (30 msgs × 30ms)");
+      std::this_thread::sleep_for(500ms);  // extra wait for physics stabilisation
 
       // 6. Attach in MoveIt Planning Scene with touch links
       //    IMPORTANT: first remove the standalone collision object so the planner
@@ -510,8 +577,9 @@ TransferOwnershipNode::TransferOwnershipNode(
   node_(node),
   psi_(nullptr)
 {
-  arm1_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/detach", 10);
-  arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", 10);
+  auto qos_tl = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
+  arm1_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/detach", qos_tl);
+  arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", qos_tl);
 }
 
 BT::NodeStatus TransferOwnershipNode::tick()
@@ -539,16 +607,18 @@ BT::NodeStatus TransferOwnershipNode::tick()
   detach_obj.object.operation = detach_obj.object.REMOVE;
   psi_->applyAttachedCollisionObject(detach_obj);
 
-  // 2. Gazebo Physics Handover: Detach Arm 1, Attach Arm 2
+  // 2. Gazebo Physics Handover: Detach Arm 1, Attach Arm 2 (burst with transient_local QoS)
+  RCLCPP_INFO(node_->get_logger(), "[BT:TransferOwnership] Sending physics handover burst (arm1 detach + arm2 attach)...");
   std_msgs::msg::Empty empty_msg;
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 30; ++i) {
     arm1_detach_pub_->publish(empty_msg);
     arm2_attach_pub_->publish(empty_msg);
-    std::this_thread::sleep_for(20ms);
+    std::this_thread::sleep_for(30ms);
   }
+  RCLCPP_INFO(node_->get_logger(), "[BT:TransferOwnership] Physics handover burst complete (30 msgs × 30ms)");
 
-  // Delay for planning scene and physics synchronization
-  std::this_thread::sleep_for(200ms);
+  // Delay for physics stabilization and planning scene synchronization
+  std::this_thread::sleep_for(500ms);
 
   // 3. MoveIt Attach to destination link with touch links
   moveit_msgs::msg::AttachedCollisionObject attach_obj;
