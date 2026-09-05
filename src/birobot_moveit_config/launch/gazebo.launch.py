@@ -241,6 +241,8 @@ def generate_launch_description():
         arguments=[
             'joint_state_broadcaster',
             '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
         ],
         output='screen',
     )
@@ -251,6 +253,8 @@ def generate_launch_description():
         arguments=[
             'arm1_joint_trajectory_controller',
             '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
         ],
         output='screen',
     )
@@ -261,6 +265,8 @@ def generate_launch_description():
         arguments=[
             'arm2_joint_trajectory_controller',
             '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
         ],
         output='screen',
     )
@@ -271,6 +277,8 @@ def generate_launch_description():
         arguments=[
             'arm1_gripper_controller',
             '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
         ],
         output='screen',
     )
@@ -281,6 +289,8 @@ def generate_launch_description():
         arguments=[
             'arm2_gripper_controller',
             '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30.0',
+            '--switch-timeout', '30.0',
         ],
         output='screen',
     )
@@ -289,7 +299,7 @@ def generate_launch_description():
         OnProcessExit(
             target_action=spawn_entity,
             on_exit=[
-                TimerAction(period=5.0, actions=[joint_state_broadcaster_spawner])
+                TimerAction(period=8.0, actions=[joint_state_broadcaster_spawner])
             ],
         )
     )
