@@ -276,6 +276,10 @@ def generate_launch_description():
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            '/arm1/attach@std_msgs/msg/Empty]gz.msgs.Empty',
+            '/arm1/detach@std_msgs/msg/Empty]gz.msgs.Empty',
+            '/arm2/attach@std_msgs/msg/Empty]gz.msgs.Empty',
+            '/arm2/detach@std_msgs/msg/Empty]gz.msgs.Empty',
         ],
         output='screen'
     )
