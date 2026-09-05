@@ -105,6 +105,10 @@ BT::NodeStatus GripperControlNode::onStart()
   std::string target_name = (action == "close" || action == "closed") ? "closed" : "open";
 
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);
+  move_group->setPlanningTime(5.0);
+  move_group->setNumPlanningAttempts(5);
+  move_group->setMaxVelocityScalingFactor(0.5);
+  move_group->setMaxAccelerationScalingFactor(0.5);
   move_group->setNamedTarget(target_name);
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
@@ -186,14 +190,19 @@ BT::NodeStatus ArmPickMtcNode::onStart()
   psi_->applyCollisionObject(object);
 
   // 2. Plan pre-grasp approach with MoveGroup
+  std::string ik_frame = (arm_name == "arm_2") ? "arm2_gripper_tcp" : "arm1_gripper_tcp";
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
+  move_group->setEndEffectorLink(ik_frame);
+  move_group->setPlanningTime(10.0);
+  move_group->setNumPlanningAttempts(10);
   move_group->setMaxVelocityScalingFactor(0.2);
   move_group->setMaxAccelerationScalingFactor(0.2);
+  move_group->setWorkspace(-1.5, -1.5, 0.0, 1.5, 1.5, 2.0);
 
-  // Pre-grasp pose: 15 cm above target
+  // Pre-grasp pose: 20 cm above target
   geometry_msgs::msg::PoseStamped pre_grasp = target_pose;
-  pre_grasp.pose.position.z += 0.15;
-  move_group->setPoseTarget(pre_grasp);
+  pre_grasp.pose.position.z += 0.20;
+  move_group->setPoseTarget(pre_grasp, ik_frame);
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   bool success = (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
@@ -203,7 +212,6 @@ BT::NodeStatus ArmPickMtcNode::onStart()
   }
 
   // 3. Execute pick trajectory and attach payload in planning scene
-  std::string ik_frame = (arm_name == "arm_2") ? "arm2_gripper_tcp" : "arm1_gripper_tcp";
   execution_future_ = std::async(std::launch::async, [this, move_group, plan, object_id, ik_frame]() {
     auto err = move_group->execute(plan);
     if (err == moveit::core::MoveItErrorCode::SUCCESS) {
@@ -264,6 +272,8 @@ BT::NodeStatus MoveNamedPoseNode::onStart()
     arm_name.c_str(), named_pose.c_str());
 
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
+  move_group->setPlanningTime(5.0);
+  move_group->setNumPlanningAttempts(5);
   move_group->setMaxVelocityScalingFactor(0.2);
   move_group->setMaxAccelerationScalingFactor(0.2);
   move_group->setNamedTarget(named_pose);

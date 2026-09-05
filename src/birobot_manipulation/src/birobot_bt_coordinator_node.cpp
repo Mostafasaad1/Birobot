@@ -3,7 +3,10 @@
 #include <chrono>
 #include <thread>
 
+#include <vector>
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "control_msgs/action/follow_joint_trajectory.hpp"
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
@@ -58,17 +61,41 @@ int main(int argc, char ** argv)
   // StdCout Logger for terminal visualization
   BT::StdCoutLogger logger(tree);
 
-  RCLCPP_INFO(node->get_logger(), "Behavior Tree loaded successfully. Starting mission execution...");
+  RCLCPP_INFO(node->get_logger(), "Behavior Tree loaded successfully.");
 
   // Spinner thread for ROS 2 callbacks
+  std::atomic<bool> keep_spinning{true};
   auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
   executor->add_node(node);
-  std::thread spin_thread([executor]() {
-    executor->spin();
+  std::thread spin_thread([executor, &keep_spinning]() {
+    while (keep_spinning && rclcpp::ok()) {
+      executor->spin_some(std::chrono::milliseconds(50));
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   });
 
-  // Small delay to allow MoveGroup & TF discovery
-  std::this_thread::sleep_for(2000ms);
+  // Wait for all arm trajectory and gripper action servers to become active
+  std::vector<std::string> action_servers = {
+    "arm1_joint_trajectory_controller/follow_joint_trajectory",
+    "arm2_joint_trajectory_controller/follow_joint_trajectory",
+    "arm1_gripper_controller/follow_joint_trajectory",
+    "arm2_gripper_controller/follow_joint_trajectory"
+  };
+
+  for (const auto & action_name : action_servers) {
+    auto client = rclcpp_action::create_client<control_msgs::action::FollowJointTrajectory>(node, action_name);
+    RCLCPP_INFO(node->get_logger(), "Waiting for action server '%s'...", action_name.c_str());
+    while (rclcpp::ok() && !client->wait_for_action_server(std::chrono::seconds(1))) {
+      RCLCPP_INFO(node->get_logger(), "Waiting for action server '%s' to become available...", action_name.c_str());
+    }
+    RCLCPP_INFO(node->get_logger(), "Action server online: '%s'", action_name.c_str());
+  }
+
+  // Allow MoveGroup controller handles to synchronize
+  RCLCPP_INFO(node->get_logger(), "Synchronizing MoveGroup controller handles...");
+  std::this_thread::sleep_for(3000ms);
+
+  RCLCPP_INFO(node->get_logger(), "All controller interfaces confirmed ready. Starting mission execution loop...");
 
   // Main Tree Execution Loop
   BT::NodeStatus status = BT::NodeStatus::RUNNING;
@@ -87,6 +114,7 @@ int main(int argc, char ** argv)
     RCLCPP_ERROR(node->get_logger(), "==========================================================");
   }
 
+  keep_spinning = false;
   executor->cancel();
   if (spin_thread.joinable()) {
     spin_thread.join();

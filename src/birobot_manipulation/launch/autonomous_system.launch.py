@@ -126,7 +126,7 @@ def generate_launch_description():
 
     # Sequence perception and BT coordinator after simulation stabilization
     sequenced_nodes = TimerAction(
-        period=14.0,
+        period=22.0,
         actions=[
             perception_node,
             bt_coordinator_node,

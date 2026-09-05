@@ -22,6 +22,7 @@ find_package(birobot_interfaces REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(control_msgs REQUIRED)
 
 include_directories(
   include
@@ -88,6 +89,8 @@ target_link_libraries(birobot_bt_coordinator_node
 )
 ament_target_dependencies(birobot_bt_coordinator_node
   rclcpp
+  rclcpp_action
+  control_msgs
   ament_index_cpp
   tf2_ros
   behaviortree_cpp
