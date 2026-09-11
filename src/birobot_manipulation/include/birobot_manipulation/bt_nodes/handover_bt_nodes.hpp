@@ -21,16 +21,64 @@ namespace birobot_manipulation
 {
 
 // String parsing helper for PoseStamped port
-inline geometry_msgs::msg::PoseStamped parsePoseString(const std::string & /*str*/)
+inline geometry_msgs::msg::PoseStamped parsePoseString(const std::string & str)
 {
   geometry_msgs::msg::PoseStamped pose;
   pose.header.frame_id = "world";
-  // Default values
+  // Default values matching original test expectations
   pose.pose.position.x = 0.10;
   pose.pose.position.y = 0.05;
   pose.pose.position.z = 0.08;
-  pose.pose.orientation.x = 1.0;
-  pose.pose.orientation.w = 0.0;
+  pose.pose.orientation.x = 0.0;
+  pose.pose.orientation.y = 0.0;
+  pose.pose.orientation.z = 0.0;
+  pose.pose.orientation.w = 1.0;
+
+  // Check for frame_id
+  auto pos_frame = str.find("frame_id:");
+  if (pos_frame == std::string::npos) {
+    pos_frame = str.find("frame:");
+  }
+  if (pos_frame != std::string::npos) {
+    size_t colon = str.find(':', pos_frame);
+    if (colon != std::string::npos) {
+      size_t start = str.find_first_not_of(" \t,\"", colon + 1);
+      size_t end = str.find_first_of(" \t,}\"", start);
+      if (start != std::string::npos) {
+        pose.header.frame_id = str.substr(start, (end == std::string::npos) ? end : (end - start));
+      }
+    }
+  }
+
+  // Helper lambda to parse key-value numbers
+  auto parse_val = [&](const std::string & key, double & val) {
+    size_t p = 0;
+    while ((p = str.find(key, p)) != std::string::npos) {
+      // Ensure key is preceded by space, comma, or brace
+      if (p == 0 || str[p - 1] == ' ' || str[p - 1] == ',' || str[p - 1] == '{') {
+        size_t after_key = p + key.length();
+        size_t colon = str.find_first_of(":=", after_key);
+        if (colon != std::string::npos && colon - after_key <= 2) {
+          try {
+            size_t num_start = str.find_first_not_of(" \t", colon + 1);
+            if (num_start != std::string::npos) {
+              val = std::stod(str.substr(num_start));
+              return;
+            }
+          } catch (...) {}
+        }
+      }
+      p += key.length();
+    }
+  };
+
+  parse_val("x", pose.pose.position.x);
+  parse_val("y", pose.pose.position.y);
+  parse_val("z", pose.pose.position.z);
+  parse_val("qx", pose.pose.orientation.x);
+  parse_val("qy", pose.pose.orientation.y);
+  parse_val("qz", pose.pose.orientation.z);
+  parse_val("qw", pose.pose.orientation.w);
   return pose;
 }
 

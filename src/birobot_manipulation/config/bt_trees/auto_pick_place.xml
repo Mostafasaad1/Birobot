@@ -1,0 +1,94 @@
+<root BTCPP_format="4" main_tree_to_execute="AutoPickPlaceTree">
+  <BehaviorTree ID="AutoPickPlaceTree">
+    <Sequence name="AutoPickPlaceMain">
+
+      <!-- ── INIT: Load fixed place pose into blackboard ── -->
+      <SetBlackboard output_key="place_pose"
+        value="x: 0.3, y: 0.3, z: 0.2, frame_id: world, qw: 1.0" />
+      <SetBlackboard output_key="confidence_threshold" value="0.70" />
+
+      <!-- ── SCAN: Detect all objects above confidence threshold ── -->
+      <ScanObjectsNode
+        confidence_threshold="{confidence_threshold}"
+        pick_queue="{pick_queue}"
+        pick_queue_ids="{pick_queue_ids}"
+        cycle_result="{cycle_result}" />
+
+      <!-- ── RANDOMIZE: Shuffle the pick queue ── -->
+      <RandomizeQueueNode
+        pick_queue="{pick_queue}"
+        pick_queue_ids="{pick_queue_ids}" />
+
+      <!-- ── LOOP: Pick all objects until queue empty ── -->
+      <Inverter>
+        <KeepRunningUntilFailure name="PickAllObjects">
+          <Sequence name="PickOneCycle">
+
+          <!-- Pop next object; FAILURE = queue empty → exits loop normally -->
+          <PopObjectNode
+            pick_queue="{pick_queue}"
+            pick_queue_ids="{pick_queue_ids}"
+            current_object_pose="{current_object_pose}"
+            current_object_id="{current_object_id}"
+            cycle_result="{cycle_result}" />
+
+          <!-- Pick the object via MTC pipeline -->
+          <Fallback name="PickWithSkipOnPlanFail">
+            <ArmPickMtcNode
+              arm="arm_1"
+              object_id="{current_object_id}"
+              target_pose="{current_object_pose}"
+              cycle_result="{cycle_result}" />
+            <!-- Planning failure → skip this object, continue loop -->
+            <SkipObjectNode
+              object_id="{current_object_id}"
+              cycle_result="{cycle_result}" />
+          </Fallback>
+
+          <!-- Verify grasp: abort cycle on miss, propagate failure up -->
+          <VerifyGraspNode
+            object_id="{current_object_id}"
+            cycle_result="{cycle_result}" />
+
+          <!-- Place at fixed bin pose -->
+          <ArmPlaceMtcNode
+            arm="arm_1"
+            place_pose="{place_pose}"
+            cycle_result="{cycle_result}" />
+
+          <!-- Re-scan after successful placement -->
+          <ScanObjectsNode
+            confidence_threshold="{confidence_threshold}"
+            pick_queue="{pick_queue}"
+            pick_queue_ids="{pick_queue_ids}"
+            cycle_result="{cycle_result}" />
+
+          <!-- Re-randomize the refreshed queue -->
+          <RandomizeQueueNode
+            pick_queue="{pick_queue}"
+            pick_queue_ids="{pick_queue_ids}" />
+
+        </Sequence>
+      </KeepRunningUntilFailure>
+      </Inverter>
+
+      <!-- ── REPORT: Emit cycle summary ── -->
+      <ReportCycleNode cycle_result="{cycle_result}" />
+
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- ── FAULT SUBTREE: Camera fault or grasp miss ── -->
+  <!-- Used via Fallback wrapping the main Sequence in the coordinator -->
+  <BehaviorTree ID="FaultHandlerTree">
+    <Sequence name="FaultHandler">
+      <HomeArmNode arm="arm_1" />
+      <AbortCycleNode
+        fault_code="{fault_code}"
+        fault_detail="{fault_detail}"
+        cycle_result="{cycle_result}" />
+      <ReportCycleNode cycle_result="{cycle_result}" />
+    </Sequence>
+  </BehaviorTree>
+
+</root>

@@ -13,7 +13,7 @@ birobot_perception_node:
     # Reduced from 50 to 10 to detect sparse clusters on top of the object
     min_cluster_size: 10
     max_cluster_size: 25000
-    max_tracked_objects: 2
+    max_tracked_objects: 5
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
     min_valid_points: 100

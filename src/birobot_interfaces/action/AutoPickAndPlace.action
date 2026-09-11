@@ -1,0 +1,24 @@
+# ============================================================
+# AutoPickAndPlace.action
+# Goal: Trigger autonomous vision-guided multi-object pick-and-place cycle.
+# No pose arguments required — pick poses are derived from depth camera;
+# place pose is fixed and encoded in the behavior tree.
+# ============================================================
+
+# Goal (empty — trigger only)
+---
+# Result
+bool success
+int32 objects_detected
+int32 objects_queued
+int32 objects_picked
+int32 objects_skipped
+int32 objects_low_confidence
+string fault_code
+string fault_detail
+float64 cycle_duration_sec
+---
+# Feedback
+string current_phase
+int32 queue_remaining
+string current_object_id
