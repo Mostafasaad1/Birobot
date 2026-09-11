@@ -211,6 +211,11 @@ bool IrregularObjectPoseEstimator::compute_cluster_pose(
   Eigen::Vector4f centroid_4f;
   pcl::compute3DCentroid(*cluster, centroid_4f);
 
+  // Table workspace sanity check: objects resting on table have z in [-0.05, 0.35]
+  if (centroid_4f[2] > 0.35f || centroid_4f[2] < -0.05f) {
+    return false;
+  }
+
   // 2. Normalized Covariance Matrix calculation
   Eigen::Matrix3f covariance_matrix;
   pcl::computeCovarianceMatrixNormalized(*cluster, centroid_4f, covariance_matrix);

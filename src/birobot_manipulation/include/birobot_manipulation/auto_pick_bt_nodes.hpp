@@ -86,8 +86,9 @@ private:
   geometry_msgs::msg::PoseArray::SharedPtr last_pose_array_;
   sensor_msgs::msg::PointCloud2::SharedPtr last_cloud_msg_;
   sensor_msgs::msg::PointCloud2::SharedPtr last_object_cloud_msg_;
+  builtin_interfaces::msg::Time last_consumed_stamp_;
   std::mutex data_mutex_;
-  double timeout_sec_{10.0};
+  double timeout_sec_{25.0};
 };
 
 /**

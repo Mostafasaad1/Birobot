@@ -69,13 +69,6 @@ ScanObjectsNode::ScanObjectsNode(
 
 BT::NodeStatus ScanObjectsNode::onStart()
 {
-  {
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    last_pose_array_.reset();
-    last_cloud_msg_.reset();
-    last_object_cloud_msg_.reset();
-  }
-
   start_scan_time_ = std::chrono::steady_clock::now();
   publishFeedbackIfAvailable(config().blackboard, "SCANNING", 0, "");
 
@@ -118,8 +111,22 @@ BT::NodeStatus ScanObjectsNode::onRunning()
     return BT::NodeStatus::FAILURE;
   }
 
-  // If we received target poses, or if full timeout elapsed
-  if (last_pose_array_ || elapsed_sec >= timeout_sec_) {
+  // Check if we have an unconsumed or updated pose array from perception:
+  bool has_fresh_poses = false;
+  if (last_pose_array_) {
+    if (last_consumed_stamp_.sec == 0 && last_consumed_stamp_.nanosec == 0) {
+      // First scan: any received pose array is fresh!
+      has_fresh_poses = true;
+    } else if (last_pose_array_->header.stamp.sec > last_consumed_stamp_.sec ||
+               (last_pose_array_->header.stamp.sec == last_consumed_stamp_.sec &&
+                last_pose_array_->header.stamp.nanosec > last_consumed_stamp_.nanosec)) {
+      // Re-scan: only accept pose array with a newer timestamp
+      has_fresh_poses = true;
+    }
+  }
+
+  // If we received fresh poses, or if full timeout elapsed
+  if (has_fresh_poses || elapsed_sec >= timeout_sec_) {
     std::vector<geometry_msgs::msg::PoseStamped> queue;
     std::vector<std::string> queue_ids;
     int detected_count = 0;
@@ -131,6 +138,11 @@ BT::NodeStatus ScanObjectsNode::onRunning()
 
       for (size_t i = 0; i < last_pose_array_->poses.size(); ++i) {
         const auto & pose = last_pose_array_->poses[i];
+
+        // Workspace filter: table objects must be within z in [-0.05, 0.35]
+        if (pose.position.z > 0.35 || pose.position.z < -0.05) {
+          continue;
+        }
 
         // Evaluate confidence derived from segmented object point density in world frame
         double confidence = 1.0;
@@ -185,6 +197,10 @@ BT::NodeStatus ScanObjectsNode::onRunning()
       cycle_res->objects_detected = std::max(cycle_res->objects_detected, detected_count);
       cycle_res->objects_queued = std::max(cycle_res->objects_queued, queued_count);
       cycle_res->objects_low_confidence += low_conf_count;
+    }
+
+    if (last_pose_array_) {
+      last_consumed_stamp_ = last_pose_array_->header.stamp;
     }
 
     RCLCPP_INFO(
@@ -477,21 +493,33 @@ BT::NodeStatus AutoArmPickMtcNode::onStart()
         return err;
       }
 
+      std::this_thread::sleep_for(250ms);
+      arm_group->setStartStateToCurrentState();
+
+      // Remove object from collision scene before descent so fingers can surround it
+      if (!psi_) {
+        psi_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
+      }
+      psi_->removeCollisionObjects({object_id});
+      std::this_thread::sleep_for(100ms);
+
       // 3. Descend to grasp pose
       geometry_msgs::msg::Pose grasp_pose = target_pose.pose;
       grasp_pose.orientation = chosen_pre_grasp.orientation;
       grasp_pose.position.z = 0.080;
 
-      std::vector<geometry_msgs::msg::Pose> waypoints_down = { grasp_pose };
-      moveit_msgs::msg::RobotTrajectory trajectory_down;
-      double fraction_down = arm_group->computeCartesianPath(waypoints_down, 0.005, trajectory_down, false);
-      if (fraction_down > 0.5) {
-        err = arm_group->execute(trajectory_down);
+      geometry_msgs::msg::PoseStamped grasp_stamped;
+      grasp_stamped.header = target_pose.header;
+      if (grasp_stamped.header.frame_id.empty()) {
+        grasp_stamped.header.frame_id = "world";
+      }
+      grasp_stamped.pose = grasp_pose;
+      arm_group->setPoseTarget(grasp_stamped, ik_frame);
+      moveit::planning_interface::MoveGroupInterface::Plan descend_plan;
+      err = arm_group->plan(descend_plan);
+      if (err == moveit::core::MoveItErrorCode::SUCCESS) {
+        err = arm_group->execute(descend_plan);
       } else {
-        geometry_msgs::msg::PoseStamped grasp_stamped;
-        grasp_stamped.header = target_pose.header;
-        grasp_stamped.pose = grasp_pose;
-        arm_group->setPoseTarget(grasp_stamped, ik_frame);
         err = arm_group->move();
       }
 
@@ -551,16 +579,20 @@ BT::NodeStatus AutoArmPickMtcNode::onStart()
       std::this_thread::sleep_for(150ms);
 
       // 7. Retreat / Lift (+15 cm Z)
-      std::vector<geometry_msgs::msg::Pose> waypoints_up = { chosen_pre_grasp };
-      moveit_msgs::msg::RobotTrajectory trajectory_up;
-      double fraction_up = arm_group->computeCartesianPath(waypoints_up, 0.005, trajectory_up, false);
-      if (fraction_up > 0.5) {
-        err = arm_group->execute(trajectory_up);
+      std::this_thread::sleep_for(250ms);
+      arm_group->setStartStateToCurrentState();
+
+      geometry_msgs::msg::PoseStamped up_stamped;
+      up_stamped.header = target_pose.header;
+      if (up_stamped.header.frame_id.empty()) {
+        up_stamped.header.frame_id = "world";
+      }
+      up_stamped.pose = chosen_pre_grasp;
+      arm_group->setPoseTarget(up_stamped, ik_frame);
+      moveit::planning_interface::MoveGroupInterface::Plan lift_plan;
+      if (arm_group->plan(lift_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+        err = arm_group->execute(lift_plan);
       } else {
-        geometry_msgs::msg::PoseStamped up_stamped;
-        up_stamped.header = target_pose.header;
-        up_stamped.pose = chosen_pre_grasp;
-        arm_group->setPoseTarget(up_stamped, ik_frame);
         err = arm_group->move();
       }
 
@@ -621,6 +653,14 @@ BT::NodeStatus SkipObjectNode::tick()
     cycle_res->is_current_skipped = true;
     cycle_res->objects_skipped++;
   }
+
+  // Return arm to home state on skip
+  try {
+    auto arm_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, "arm_1");
+    arm_group->setStartStateToCurrentState();
+    arm_group->setNamedTarget("home");
+    arm_group->move();
+  } catch (...) {}
 
   RCLCPP_WARN(
     node_->get_logger(),
@@ -763,14 +803,15 @@ BT::NodeStatus ArmPlaceMtcNode::onStart()
         return err;
       }
 
+      std::this_thread::sleep_for(250ms);
+      arm_group->setStartStateToCurrentState();
+
       // 2. Descend to place pose
-      std::vector<geometry_msgs::msg::Pose> waypoints = { place_pose.pose };
-      moveit_msgs::msg::RobotTrajectory traj;
-      double frac = arm_group->computeCartesianPath(waypoints, 0.005, traj, false);
-      if (frac > 0.5) {
-        err = arm_group->execute(traj);
+      arm_group->setPoseTarget(place_pose, ik_frame);
+      moveit::planning_interface::MoveGroupInterface::Plan place_descend_plan;
+      if (arm_group->plan(place_descend_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+        err = arm_group->execute(place_descend_plan);
       } else {
-        arm_group->setPoseTarget(place_pose, ik_frame);
         err = arm_group->move();
       }
 
@@ -805,14 +846,21 @@ BT::NodeStatus ArmPlaceMtcNode::onStart()
       std::this_thread::sleep_for(100ms);
 
       // 6. Retreat back to pre-place pose
-      std::vector<geometry_msgs::msg::Pose> waypoints_up = { pre_place.pose };
-      frac = arm_group->computeCartesianPath(waypoints_up, 0.005, traj, false);
-      if (frac > 0.5) {
-        arm_group->execute(traj);
+      std::this_thread::sleep_for(250ms);
+      arm_group->setStartStateToCurrentState();
+      arm_group->setPoseTarget(pre_place, ik_frame);
+      moveit::planning_interface::MoveGroupInterface::Plan retreat_plan;
+      if (arm_group->plan(retreat_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+        arm_group->execute(retreat_plan);
       } else {
-        arm_group->setPoseTarget(pre_place, ik_frame);
         arm_group->move();
       }
+
+      // 7. Return to "home" so camera view over table is unobstructed for re-scan
+      std::this_thread::sleep_for(250ms);
+      arm_group->setStartStateToCurrentState();
+      arm_group->setNamedTarget("home");
+      arm_group->move();
 
       return moveit::core::MoveItErrorCode::SUCCESS;
     });
