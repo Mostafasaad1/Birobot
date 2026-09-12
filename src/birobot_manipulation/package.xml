@@ -24,6 +24,8 @@
   <depend>behaviortree_cpp</depend>
   <depend>control_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>moveit_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
 

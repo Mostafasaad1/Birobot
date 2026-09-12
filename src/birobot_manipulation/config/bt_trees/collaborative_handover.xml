@@ -23,8 +23,9 @@
       <!-- 6. Planning Scene atomic ownership transfer: detach from Arm 1, attach to Arm 2 -->
       <TransferOwnership object_id="{object_id}" from_link="arm1_gripper_tcp" to_link="arm2_gripper_tcp"/>
 
-      <!-- 7. Arm 1 releases and retreats to home -->
+      <!-- 7. Arm 1 releases, retracts linearly along -X to clear Arm 2, then retreats to home -->
       <GripperControl gripper="arm1" action="open"/>
+      <CartesianRetract arm="arm_1" dx="-0.130" dy="0.0" dz="0.0"/>
       <MoveNamedPose arm="arm_1" named_pose="home"/>
 
       <!-- 8. Arm 2 transports payload to drop-off bin -->

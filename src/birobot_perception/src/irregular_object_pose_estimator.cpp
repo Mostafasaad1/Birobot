@@ -51,6 +51,14 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   diagnostic_rate_hz_ = declare_parameter<double>("diagnostic_rate_hz", 1.0);
   min_valid_points_ = declare_parameter<int>("min_valid_points", 100);
 
+  // Workspace Bounding Box Parameters (crops out overhead robot arms, floor, outside tables)
+  workspace_min_x_ = declare_parameter<double>("workspace_min_x", -0.45);
+  workspace_max_x_ = declare_parameter<double>("workspace_max_x", 0.45);
+  workspace_min_y_ = declare_parameter<double>("workspace_min_y", -0.35);
+  workspace_max_y_ = declare_parameter<double>("workspace_max_y", 0.35);
+  workspace_min_z_ = declare_parameter<double>("workspace_min_z", -0.05);
+  workspace_max_z_ = declare_parameter<double>("workspace_max_z", 0.35);
+
   // RGB-D Color Parameters
   enable_color_filtering_ = declare_parameter<bool>("enable_color_filtering", true);
   hsv_red_h_low_1_ = declare_parameter<int>("hsv_red_h_low_1", 0);
@@ -245,25 +253,28 @@ bool IrregularObjectPoseEstimator::compute_cluster_pose(
   Eigen::Matrix3f covariance_matrix;
   pcl::computeCovarianceMatrixNormalized(*cluster, centroid_4f, covariance_matrix);
 
-  // 3. Eigen decomposition (PCA)
-  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigensolver(covariance_matrix);
-  if (eigensolver.info() != Eigen::Success) {
+  // 3. 2D PCA in the XY horizontal table plane.
+  // The table is horizontal (Z normal) and gripper approaches top-down along -Z.
+  // Grasping requires determining the object length orientation in the XY plane.
+  // Using 2D PCA in XY avoids contamination from the vertical height Z
+  // (e.g. when object height 0.20m > length 0.15m).
+  Eigen::Matrix2f cov_2d = covariance_matrix.block<2, 2>(0, 0);
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix2f> eigensolver_2d(cov_2d);
+  if (eigensolver_2d.info() != Eigen::Success) {
     return false;
   }
 
-  // Eigenvectors sorted by ascending eigenvalue. Col(2) is primary axis (longest dimension).
-  Eigen::Vector3f primary_axis = eigensolver.eigenvectors().col(2);
-
-  // Project primary axis onto XY plane for length orientation
-  // Gripper Y aligns with the object length. Gripper X (finger opening)
-  // aligns with the object width so that the 0.115m gripper can grasp the 0.08m width.
-  Eigen::Vector3f y_gripper = primary_axis;
-  y_gripper.z() = 0.0f;
-  if (y_gripper.norm() < 1e-4f) {
-    y_gripper = Eigen::Vector3f::UnitY();
+  // Col(1) is the eigenvector with the largest eigenvalue in the XY plane (object length)
+  Eigen::Vector2f primary_axis_2d = eigensolver_2d.eigenvectors().col(1);
+  if (primary_axis_2d.norm() < 1e-4f) {
+    primary_axis_2d = Eigen::Vector2f::UnitX();
   } else {
-    y_gripper.normalize();
+    primary_axis_2d.normalize();
   }
+
+  // Gripper Y aligns with the object length
+  Eigen::Vector3f y_gripper(primary_axis_2d.x(), primary_axis_2d.y(), 0.0f);
+  y_gripper.normalize();
 
   // Approach Z constrained downward (into table)
   Eigen::Vector3f z_gripper(0.0f, 0.0f, -1.0f);
@@ -410,10 +421,19 @@ void IrregularObjectPoseEstimator::rgb_image_callback(const sensor_msgs::msg::Im
 bool IrregularObjectPoseEstimator::is_cluster_red(
   const pcl::PointCloud<pcl::PointXYZ>::Ptr /*cluster*/,
   const geometry_msgs::msg::Pose & cluster_pose,
-  const cv::Mat & rgb_img)
+  const cv::Mat & rgb_img,
+  double * dist_2d_out)
 {
+  if (dist_2d_out) {
+    *dist_2d_out = 1e9;
+  }
+
   if (!enable_color_filtering_) {
     return true;
+  }
+
+  if (rgb_img.empty()) {
+    return false;
   }
 
   // Camera intrinsics: 640x480, HFOV=1.2 rad -> fx = fy = 467.74, cx = 320, cy = 240
@@ -449,46 +469,54 @@ bool IrregularObjectPoseEstimator::is_cluster_red(
     }
   }
 
-  // 1. Check distance to 2D red contour centroid if detected in RGB feed
-  if (latest_red_2d_detected_ && u_proj >= 0.0 && v_proj >= 0.0) {
-    double dist_pix = std::hypot(u_proj - latest_red_2d_centroid_.x, v_proj - latest_red_2d_centroid_.y);
-    if (dist_pix < 65.0) {
-      return true;
-    }
-  }
-
-  // 2. Direct RGB pixel color sampling around projected center in current image
-  if (!rgb_img.empty() && u_proj >= 5.0 && u_proj < rgb_img.cols - 5 &&
-      v_proj >= 5.0 && v_proj < rgb_img.rows - 5)
+  // Ensure projected center is inside the image bounds
+  if (u_proj < 5.0 || u_proj >= rgb_img.cols - 5 ||
+      v_proj < 5.0 || v_proj >= rgb_img.rows - 5)
   {
-    int u_i = static_cast<int>(u_proj);
-    int v_i = static_cast<int>(v_proj);
-
-    int r_sum = 0, g_sum = 0, b_sum = 0, count = 0;
-    for (int dy = -4; dy <= 4; ++dy) {
-      for (int dx = -4; dx <= 4; ++dx) {
-        cv::Vec3b bgr = rgb_img.at<cv::Vec3b>(v_i + dy, u_i + dx);
-        b_sum += bgr[0];
-        g_sum += bgr[1];
-        r_sum += bgr[2];
-        count++;
-      }
-    }
-    double r_avg = static_cast<double>(r_sum) / count;
-    double g_avg = static_cast<double>(g_sum) / count;
-    double b_avg = static_cast<double>(b_sum) / count;
-
-    if (r_avg > 90.0 && r_avg > 1.25 * b_avg && r_avg > 1.25 * g_avg) {
-      return true;
-    }
+    return false;
   }
 
-  // If no image has arrived yet (e.g. standalone test harness), default to true
-  if (rgb_img.empty()) {
-    return true;
+  // Direct RGB pixel color sampling in a 9x9 neighborhood around projected center
+  int u_i = static_cast<int>(std::round(u_proj));
+  int v_i = static_cast<int>(std::round(v_proj));
+
+  int r_sum = 0, g_sum = 0, b_sum = 0, count = 0;
+  for (int dy = -4; dy <= 4; ++dy) {
+    for (int dx = -4; dx <= 4; ++dx) {
+      cv::Vec3b bgr = rgb_img.at<cv::Vec3b>(v_i + dy, u_i + dx);
+      b_sum += bgr[0];
+      g_sum += bgr[1];
+      r_sum += bgr[2];
+      count++;
+    }
+  }
+  double r_avg = static_cast<double>(r_sum) / count;
+  double g_avg = static_cast<double>(g_sum) / count;
+  double b_avg = static_cast<double>(b_sum) / count;
+
+  // Strict red channel verification: Red must be bright and dominant over Blue and Green.
+  // The blue obstacle has B > 120, R < 50; the table is grey (R ~ G ~ B).
+  // Only the red object satisfies R > 80 && R > 1.30 * B && R > 1.30 * G.
+  bool color_is_red = (r_avg > 80.0 && r_avg > 1.30 * b_avg && r_avg > 1.30 * g_avg);
+  if (!color_is_red) {
+    return false;
   }
 
-  return false;
+  // Correlate with 2D red contour detection from overhead camera if available
+  if (latest_red_2d_detected_) {
+    double dist_pix = std::hypot(u_proj - latest_red_2d_centroid_.x, v_proj - latest_red_2d_centroid_.y);
+    if (dist_2d_out) {
+      *dist_2d_out = dist_pix;
+    }
+    // True red object projects within 15-20 pixels of 2D contour; blue obstacle is >50px away
+    if (dist_pix > 35.0) {
+      return false;
+    }
+  } else if (dist_2d_out) {
+    *dist_2d_out = 0.0;
+  }
+
+  return true;
 }
 
 void IrregularObjectPoseEstimator::pointcloud_callback(
@@ -539,8 +567,33 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
     return;
   }
 
+  // Filter point cloud to valid manipulation workspace on the table:
+  // Discards overhead robot links (Z > 0.35m), ground/floor, and outside table boundaries
+  pcl::PointCloud<pcl::PointXYZ>::Ptr workspace_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  workspace_cloud->reserve(clean_cloud->size());
+  for (const auto & pt : clean_cloud->points) {
+    if (pt.x >= workspace_min_x_ && pt.x <= workspace_max_x_ &&
+        pt.y >= workspace_min_y_ && pt.y <= workspace_max_y_ &&
+        pt.z >= workspace_min_z_ && pt.z <= workspace_max_z_) {
+      workspace_cloud->points.push_back(pt);
+    }
+  }
+  workspace_cloud->width = workspace_cloud->points.size();
+  workspace_cloud->height = 1;
+  workspace_cloud->is_dense = true;
+
+  if (static_cast<int>(workspace_cloud->size()) < min_valid_points_) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "Workspace point cloud has only %zu valid points (minimum threshold: %d)",
+      workspace_cloud->size(), min_valid_points_);
+    tracked_objects_count_ = 0;
+    last_processing_latency_ms_ = 0.0;
+    return;
+  }
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr non_table_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  segment_table_plane(clean_cloud, non_table_cloud, last_inlier_pct_);
+  segment_table_plane(workspace_cloud, non_table_cloud, last_inlier_pct_);
 
   auto clusters = extract_clusters(non_table_cloud);
   tracked_objects_count_ = static_cast<int>(clusters.size());
@@ -559,24 +612,34 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
     size_t cluster_idx;
     geometry_msgs::msg::Pose pose;
     bool is_red;
+    double dist_2d_to_red;
   };
   std::vector<ClusterInfo> detected_clusters;
 
-  int red_idx = -1;
   for (size_t i = 0; i < clusters.size(); ++i) {
     geometry_msgs::msg::Pose target_pose;
     if (compute_cluster_pose(clusters[i], target_pose)) {
-      bool is_red = is_cluster_red(clusters[i], target_pose, current_rgb);
-      if (is_red && red_idx == -1) {
-        red_idx = static_cast<int>(detected_clusters.size());
-      }
-      detected_clusters.push_back({i, target_pose, is_red});
+      double dist_2d = 1e9;
+      bool is_red = is_cluster_red(clusters[i], target_pose, current_rgb, &dist_2d);
+      detected_clusters.push_back({i, target_pose, is_red, dist_2d});
     }
   }
 
-  // If a red cluster was found and it is not at index 0, swap it to index 0 so red is always prioritized
-  if (red_idx > 0) {
-    std::swap(detected_clusters[0], detected_clusters[red_idx]);
+  // Find the single best red cluster (smallest distance to 2D red contour centroid)
+  int best_red_idx = -1;
+  double min_dist_2d = 1e9;
+  for (size_t i = 0; i < detected_clusters.size(); ++i) {
+    if (detected_clusters[i].is_red) {
+      if (detected_clusters[i].dist_2d_to_red < min_dist_2d) {
+        min_dist_2d = detected_clusters[i].dist_2d_to_red;
+        best_red_idx = static_cast<int>(i);
+      }
+    }
+  }
+
+  // Swap best red cluster to index 0 so red target is always prioritized
+  if (best_red_idx > 0) {
+    std::swap(detected_clusters[0], detected_clusters[best_red_idx]);
   }
   red_target_detected_ = (!detected_clusters.empty() && detected_clusters[0].is_red);
 

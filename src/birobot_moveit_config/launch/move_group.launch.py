@@ -65,6 +65,7 @@ def generate_launch_description():
         'moveit_controller_manager':
             'moveit_simple_controller_manager/MoveItSimpleControllerManager',
         'moveit_manage_controllers': False,
+        'trajectory_execution.allowed_start_tolerance': 0.05,
     }
 
     # 3D Perception & Octomap Configuration

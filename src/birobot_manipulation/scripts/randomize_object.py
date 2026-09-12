@@ -82,8 +82,8 @@ def main():
         help='Target Y coordinate in meters'
     )
     parser.add_argument(
-        '--z', type=float, default=0.08,
-        help='Target Z coordinate in meters (default: 0.08)'
+        '--z', type=float, default=0.15,
+        help='Target Z coordinate in meters (default: 0.15)'
     )
     parser.add_argument(
         '--yaw', type=float, default=None,
@@ -99,7 +99,7 @@ def main():
     if args.random or (args.x is None and args.y is None):
         target_x = round(random.uniform(-0.05, 0.15), 3)
         target_y = round(random.uniform(-0.18, 0.18), 3)
-        target_z = 0.08
+        target_z = 0.15
         target_yaw = round(random.uniform(-1.5708, 1.5708), 3)
     else:
         target_x = args.x if args.x is not None else 0.10

@@ -49,12 +49,20 @@
         <joint name="arm1_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="arm_1">
-        <joint name="arm1_shoulder_pan_joint" value="-0.6098"/>
-        <joint name="arm1_shoulder_lift_joint" value="-1.9286"/>
-        <joint name="arm1_elbow_joint" value="2.5538"/>
-        <joint name="arm1_wrist_1_joint" value="-0.6247"/>
-        <joint name="arm1_wrist_2_joint" value="0.9614"/>
+        <joint name="arm1_shoulder_pan_joint" value="-0.6112"/>
+        <joint name="arm1_shoulder_lift_joint" value="-2.0032"/>
+        <joint name="arm1_elbow_joint" value="2.4896"/>
+        <joint name="arm1_wrist_1_joint" value="-0.4865"/>
+        <joint name="arm1_wrist_2_joint" value="0.9596"/>
         <joint name="arm1_wrist_3_joint" value="0.0"/>
+    </group_state>
+    <group_state name="handover_retract" group="arm_1">
+        <joint name="arm1_shoulder_pan_joint" value="-0.9904"/>
+        <joint name="arm1_shoulder_lift_joint" value="-2.4392"/>
+        <joint name="arm1_elbow_joint" value="2.6330"/>
+        <joint name="arm1_wrist_1_joint" value="-0.2052"/>
+        <joint name="arm1_wrist_2_joint" value="0.6054"/>
+        <joint name="arm1_wrist_3_joint" value="0.0091"/>
     </group_state>
     <group_state name="home" group="arm_2">
         <joint name="arm2_elbow_joint" value="0"/>
@@ -65,11 +73,11 @@
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="arm_2">
-        <joint name="arm2_shoulder_pan_joint" value="-0.6098"/>
-        <joint name="arm2_shoulder_lift_joint" value="-1.9286"/>
-        <joint name="arm2_elbow_joint" value="2.5538"/>
-        <joint name="arm2_wrist_1_joint" value="-0.6247"/>
-        <joint name="arm2_wrist_2_joint" value="0.9614"/>
+        <joint name="arm2_shoulder_pan_joint" value="-0.6904"/>
+        <joint name="arm2_shoulder_lift_joint" value="-2.0966"/>
+        <joint name="arm2_elbow_joint" value="2.5315"/>
+        <joint name="arm2_wrist_1_joint" value="-0.4348"/>
+        <joint name="arm2_wrist_2_joint" value="0.8804"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
     <group_state name="drop_off" group="arm_2">
@@ -95,17 +103,17 @@
         <joint name="arm2_wrist_3_joint" value="0"/>
     </group_state>
     <group_state name="handover" group="dual_arms">
-        <joint name="arm1_shoulder_pan_joint" value="-0.6098"/>
-        <joint name="arm1_shoulder_lift_joint" value="-1.9286"/>
-        <joint name="arm1_elbow_joint" value="2.5538"/>
-        <joint name="arm1_wrist_1_joint" value="-0.6247"/>
-        <joint name="arm1_wrist_2_joint" value="0.9614"/>
+        <joint name="arm1_shoulder_pan_joint" value="-0.6112"/>
+        <joint name="arm1_shoulder_lift_joint" value="-2.0032"/>
+        <joint name="arm1_elbow_joint" value="2.4896"/>
+        <joint name="arm1_wrist_1_joint" value="-0.4865"/>
+        <joint name="arm1_wrist_2_joint" value="0.9596"/>
         <joint name="arm1_wrist_3_joint" value="0.0"/>
-        <joint name="arm2_shoulder_pan_joint" value="-0.6098"/>
-        <joint name="arm2_shoulder_lift_joint" value="-1.9286"/>
-        <joint name="arm2_elbow_joint" value="2.5538"/>
-        <joint name="arm2_wrist_1_joint" value="-0.6247"/>
-        <joint name="arm2_wrist_2_joint" value="0.9614"/>
+        <joint name="arm2_shoulder_pan_joint" value="-0.6904"/>
+        <joint name="arm2_shoulder_lift_joint" value="-2.0966"/>
+        <joint name="arm2_elbow_joint" value="2.5315"/>
+        <joint name="arm2_wrist_1_joint" value="-0.4348"/>
+        <joint name="arm2_wrist_2_joint" value="0.8804"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
     <group_state name="open" group="arm1_hand">

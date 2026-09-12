@@ -28,7 +28,7 @@ TEST_F(BtNodesTest, TestPoseParsing)
   EXPECT_EQ(pose.header.frame_id, "world");
   EXPECT_DOUBLE_EQ(pose.pose.position.x, 0.10);
   EXPECT_DOUBLE_EQ(pose.pose.position.y, 0.05);
-  EXPECT_DOUBLE_EQ(pose.pose.position.z, 0.08);
+  EXPECT_DOUBLE_EQ(pose.pose.position.z, 0.15);
 }
 
 TEST_F(BtNodesTest, TestBehaviorTreeFactoryRegistrationAndXmlParsing)
@@ -54,6 +54,7 @@ TEST_F(BtNodesTest, TestBehaviorTreeFactoryRegistrationAndXmlParsing)
         <GripperControl gripper="arm2" action="close"/>
         <TransferOwnership object_id="{object_id}" from_link="arm1_gripper_tcp" to_link="arm2_gripper_tcp"/>
         <GripperControl gripper="arm1" action="open"/>
+        <CartesianRetract arm="arm_1" dx="-0.130" dy="0.0" dz="0.0"/>
         <MoveNamedPose arm="arm_1" named_pose="home"/>
         <MoveNamedPose arm="arm_2" named_pose="drop_off"/>
         <GripperControl gripper="arm2" action="open"/>

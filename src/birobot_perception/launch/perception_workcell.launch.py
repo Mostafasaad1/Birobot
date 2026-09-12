@@ -144,22 +144,22 @@ def launch_setup(context, *args, **kwargs):
         output='screen',
     )
 
-    # 5. Spawn Object 1 (Red irregular box resting on table surface z = 0.08)
+    # 5. Spawn Object 1 (Red irregular box resting on table surface z = 0.15)
     obj1_sdf = """<sdf version="1.6">
       <model name="irregular_object_1">
         <pose>0 0 0 0 0 0</pose>
         <link name="link">
           <inertial>
             <mass>0.5</mass>
-            <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.002</iyy><iyz>0</iyz><izz>0.002</izz></inertia>
+            <inertia><ixx>0.00193</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.00260</iyy><iyz>0</iyz><izz>0.00120</izz></inertia>
           </inertial>
           <visual name="visual">
-            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+            <geometry><box><size>0.15 0.08 0.20</size></box></geometry>
             <material><ambient>1 0 0 1</ambient>
             <diffuse>1 0 0 1</diffuse></material>
           </visual>
           <collision name="collision">
-            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+            <geometry><box><size>0.15 0.08 0.20</size></box></geometry>
           </collision>
         </link>
       </model>
@@ -179,7 +179,7 @@ def launch_setup(context, *args, **kwargs):
             '-world', 'empty',
             '-x', '0.10',
             '-y', '0.05',
-            '-z', '0.08',
+            '-z', '0.15',
             '-Y', '0.4',
         ],
         output='screen',

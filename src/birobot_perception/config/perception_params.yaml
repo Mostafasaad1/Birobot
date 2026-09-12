@@ -10,13 +10,20 @@ birobot_perception_node:
     # Cluster tolerance of 0.025m allows points on the object surface to group together
     # at the ~307k point resolution of the depth image from 2.5m height.
     cluster_tolerance: 0.025
-    # Reduced from 50 to 10 to detect sparse clusters on top of the object
-    min_cluster_size: 10
+    # Minimum cluster size: reject noise (< 40 points) while easily capturing 20cm objects (> 200 points)
+    min_cluster_size: 40
     max_cluster_size: 25000
     max_tracked_objects: 5
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
     min_valid_points: 100
+    # Workspace bounding box: filters out overhead robot links (Z > 0.35m) and outside boundaries
+    workspace_min_x: -0.45
+    workspace_max_x: 0.45
+    workspace_min_y: -0.35
+    workspace_max_y: 0.35
+    workspace_min_z: -0.05
+    workspace_max_z: 0.35
     input_rgb_image_topic: "/birobot/depth_camera/image"
     enable_color_filtering: true
     hsv_red_h_low_1: 0

@@ -68,7 +68,8 @@ public:
   bool is_cluster_red(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr cluster,
     const geometry_msgs::msg::Pose & cluster_pose,
-    const cv::Mat & rgb_img);
+    const cv::Mat & rgb_img,
+    double * dist_2d_out = nullptr);
 
   void pointcloud_callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
 
@@ -107,6 +108,14 @@ private:
   int max_tracked_objects_;
   double diagnostic_rate_hz_;
   int min_valid_points_;
+
+  // Workspace Bounding Box Parameters
+  double workspace_min_x_;
+  double workspace_max_x_;
+  double workspace_min_y_;
+  double workspace_max_y_;
+  double workspace_min_z_;
+  double workspace_max_z_;
 
   // RGB-D Color Parameters
   bool enable_color_filtering_;

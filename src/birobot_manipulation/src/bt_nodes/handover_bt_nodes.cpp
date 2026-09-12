@@ -41,29 +41,36 @@ BT::NodeStatus DetectObjectNode::tick()
 
   // Retry TF lookup for up to 10 seconds to allow perception pipeline to start
   bool tf_found = false;
+  std::string chosen_frame = "red_object_target";
   if (tf_buffer_) {
     const int max_polls = 100;   // 100 * 100ms = 10 seconds
     for (int poll = 0; poll < max_polls && !tf_found; ++poll) {
       try {
-        if (tf_buffer_->canTransform("world", "grasp_target_1", tf2::TimePointZero, 100ms)) {
-          auto tf = tf_buffer_->lookupTransform("world", "grasp_target_1", tf2::TimePointZero);
-          detected_pose.pose.position.x = tf.transform.translation.x;
-          detected_pose.pose.position.y = tf.transform.translation.y;
-          detected_pose.pose.position.z = tf.transform.translation.z;
-          detected_pose.pose.orientation = tf.transform.rotation;
-          tf_found = true;
-          RCLCPP_INFO(
-            node_->get_logger(),
-            "[BT:DetectObject] Resolved dynamic grasp_target_1 from 3D perception: (%.3f, %.3f, %.3f) after %d polls",
-            detected_pose.pose.position.x, detected_pose.pose.position.y,
-            detected_pose.pose.position.z, poll + 1);
+        if (tf_buffer_->canTransform("world", "red_object_target", tf2::TimePointZero, 100ms)) {
+          chosen_frame = "red_object_target";
+        } else if (tf_buffer_->canTransform("world", "grasp_target_1", tf2::TimePointZero, 100ms)) {
+          chosen_frame = "grasp_target_1";
         } else {
           if (poll % 10 == 0) {
             RCLCPP_INFO(node_->get_logger(),
-              "[BT:DetectObject] Waiting for perception TF 'grasp_target_1' (%d/100)...", poll + 1);
+              "[BT:DetectObject] Waiting for perception TF 'red_object_target' or 'grasp_target_1' (%d/100)...", poll + 1);
           }
           std::this_thread::sleep_for(100ms);
+          continue;
         }
+
+        auto tf = tf_buffer_->lookupTransform("world", chosen_frame, tf2::TimePointZero);
+        detected_pose.pose.position.x = tf.transform.translation.x;
+        detected_pose.pose.position.y = tf.transform.translation.y;
+        detected_pose.pose.position.z = tf.transform.translation.z;
+        detected_pose.pose.orientation = tf.transform.rotation;
+        tf_found = true;
+        RCLCPP_INFO(
+          node_->get_logger(),
+          "[BT:DetectObject] Resolved dynamic '%s' from 3D perception: (%.3f, %.3f, %.3f) after %d polls",
+          chosen_frame.c_str(),
+          detected_pose.pose.position.x, detected_pose.pose.position.y,
+          detected_pose.pose.position.z, poll + 1);
       } catch (const tf2::TransformException & ex) {
         RCLCPP_DEBUG(node_->get_logger(), "[BT:DetectObject] TF lookup attempt %d failed: %s", poll, ex.what());
         std::this_thread::sleep_for(100ms);
@@ -73,12 +80,11 @@ BT::NodeStatus DetectObjectNode::tick()
 
   if (!tf_found) {
     // Fallback: Use canonical table surface position matching gazebo.launch.py spawn args:
-    // -x 0.10 -y 0.05 -z 0.08 -Y 0.4
-    // Table surface is at z=0.05, object sits from z=0.05 to z=0.11 (centre at 0.08).
-    // TCP target z=0.075 places finger tips at z=0.065, grasping the 0.08m width.
+    // -x 0.10 -y 0.05 -z 0.15 -Y 0.4
+    // Table surface is at z=0.05, object sits from z=0.05 to z=0.25 (top surface at 0.250).
     detected_pose.pose.position.x = 0.10;
     detected_pose.pose.position.y = 0.05;
-    detected_pose.pose.position.z = 0.075;
+    detected_pose.pose.position.z = 0.250;
     // Width-aligned top-down orientation: object yaw=0.4 rad → grasp yaw = 0.4 + pi/2 = 1.9708 rad
     // q = (sin(pi/2)*cos(yaw/2), sin(pi/2)*sin(yaw/2), 0, 0) = (cos(yaw/2), sin(yaw/2), 0, 0)
     detected_pose.pose.orientation.x = 0.5525;
@@ -239,6 +245,8 @@ ArmPickMtcNode::ArmPickMtcNode(
   auto qos_tl = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
   arm1_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/attach", qos_tl);
   arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", qos_tl);
+  planning_scene_diff_pub_ = node_->create_publisher<moveit_msgs::msg::PlanningScene>("/planning_scene", 10);
+  clear_octomap_client_ = node_->create_client<std_srvs::srv::Empty>("/clear_octomap");
   // Give ros_gz_bridge time to connect and receive the transient-local message
   std::this_thread::sleep_for(1000ms);
 }
@@ -282,7 +290,7 @@ BT::NodeStatus ArmPickMtcNode::onStart()
 
     shape_msgs::msg::SolidPrimitive prim;
     prim.type = prim.BOX;
-    prim.dimensions = {0.15, 0.08, 0.06};
+    prim.dimensions = {0.15, 0.08, 0.20};
     world_obj.primitives.push_back(prim);
 
     // Derive object yaw dynamically from detected perception orientation
@@ -305,8 +313,8 @@ BT::NodeStatus ArmPickMtcNode::onStart()
     geometry_msgs::msg::Pose obj_pose;
     obj_pose.position.x = target_pose.pose.position.x;
     obj_pose.position.y = target_pose.pose.position.y;
-    // Object bottom is at table surface (z=0.05), centre at z=0.08
-    obj_pose.position.z = 0.080;
+    // Object top surface is target_pose.pose.position.z (~0.25m), height=0.20m -> centre at z - 0.100m
+    obj_pose.position.z = target_pose.pose.position.z - 0.100;
     obj_pose.orientation.x = q_box.x();
     obj_pose.orientation.y = q_box.y();
     obj_pose.orientation.z = q_box.z();
@@ -421,12 +429,22 @@ BT::NodeStatus ArmPickMtcNode::onStart()
         return err;
       }
 
+      // Allow physical robot in Gazebo to settle at pre-grasp pose
+      std::this_thread::sleep_for(300ms);
+      arm_group->setStartStateToCurrentState();
+
       // 3. Descend to grasp pose using Cartesian path (keep same orientation)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 3: Descending to grasp pose...");
       geometry_msgs::msg::Pose grasp_pose = target_pose.pose;
       grasp_pose.orientation = chosen_pre_grasp_pose.orientation;
-      // Object sits on table (z=0.05), height=0.06 -> center at z=0.080
-      grasp_pose.position.z = 0.080;
+      // Dynamic grasp depth: grip 35mm below the perception-detected top surface.
+      // Gripper finger length is 60mm and palm is at TCP - 50mm. Grasping at (top - 35mm) keeps the palm
+      // safely 15mm above the object top with zero collision, while fingers firmly grip 45mm of the object.
+      const double grasp_offset_from_top = 0.035;
+      grasp_pose.position.z = target_pose.pose.position.z - grasp_offset_from_top;
+      RCLCPP_INFO(node_->get_logger(),
+        "[BT:ArmPickMtc] Dynamic grasp Z: perception top=%.3f, grasp_target_z=%.3f (offset -%.3f)",
+        target_pose.pose.position.z, grasp_pose.position.z, grasp_offset_from_top);
 
       std::vector<geometry_msgs::msg::Pose> waypoints_down = { grasp_pose };
       moveit_msgs::msg::RobotTrajectory trajectory_down;
@@ -493,16 +511,21 @@ BT::NodeStatus ArmPickMtcNode::onStart()
 
       shape_msgs::msg::SolidPrimitive primitive;
       primitive.type = primitive.BOX;
-      primitive.dimensions = {0.15, 0.08, 0.06};
+      primitive.dimensions = {0.15, 0.08, 0.20};
       attached_obj.object.primitives.push_back(primitive);
 
-      // Object sits at TCP origin (centred in gripper)
+      // Object sits relative to TCP:
+      // TCP is at 35mm below top surface.
+      // Object center is 100mm below top surface.
+      // So object center is 65mm along tool axis (+Z in tcp frame)
       geometry_msgs::msg::Pose local_pose;
+      local_pose.position.z = 0.065;
       local_pose.orientation.w = 1.0;
       attached_obj.object.primitive_poses.push_back(local_pose);
 
-      // Allow collisions with every gripper link and workcell surface link
+      // Allow collisions with every gripper link, octomap, and workcell surface link
       attached_obj.touch_links = {
+        "<octomap>",
         "arm1_gripper_base_link",
         "arm1_gripper_left_finger",
         "arm1_gripper_right_finger",
@@ -520,6 +543,17 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       };
       psi_->applyAttachedCollisionObject(attached_obj);
       std::this_thread::sleep_for(200ms);  // wait for planning scene sync
+
+      // Flush stale octomap voxels from camera point cloud
+      if (clear_octomap_client_) {
+        if (clear_octomap_client_->wait_for_service(std::chrono::seconds(2))) {
+          auto req = std::make_shared<std_srvs::srv::Empty::Request>();
+          auto future = clear_octomap_client_->async_send_request(req);
+          future.wait_for(std::chrono::milliseconds(500));
+          RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] OctoMap cleared.");
+        }
+      }
+      std::this_thread::sleep_for(150ms);
 
       // 7. Retreat / Lift up with payload (+15 cm Z)
       RCLCPP_INFO(node_->get_logger(), "[BT:ArmPickMtc] Step 7: Lifting payload to retreat pose...");
@@ -568,6 +602,7 @@ MoveNamedPoseNode::MoveNamedPoseNode(
 : BT::StatefulActionNode(name, config),
   node_(node)
 {
+  clear_octomap_client_ = node_->create_client<std_srvs::srv::Empty>("/clear_octomap");
 }
 
 BT::NodeStatus MoveNamedPoseNode::onStart()
@@ -582,7 +617,19 @@ BT::NodeStatus MoveNamedPoseNode::onStart()
     "[BT:MoveNamedPose] Moving arm '%s' to named pose '%s'",
     arm_name.c_str(), named_pose.c_str());
 
+  // Flush residual octomap voxels from camera to ensure clean start state
+  if (clear_octomap_client_) {
+    if (clear_octomap_client_->wait_for_service(std::chrono::seconds(2))) {
+      auto req = std::make_shared<std_srvs::srv::Empty::Request>();
+      auto future = clear_octomap_client_->async_send_request(req);
+      future.wait_for(std::chrono::milliseconds(500));
+      RCLCPP_INFO(node_->get_logger(), "[BT:MoveNamedPose] OctoMap cleared.");
+    }
+  }
+  std::this_thread::sleep_for(150ms);
+
   auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
+  move_group->setStartStateToCurrentState();
   move_group->setPlanningTime(10.0);
   move_group->setNumPlanningAttempts(15);
   move_group->setMaxVelocityScalingFactor(0.25);
@@ -637,7 +684,103 @@ void MoveNamedPoseNode::onHalted()
   RCLCPP_INFO(node_->get_logger(), "[BT:MoveNamedPose] Action halted");
 }
 
-// ── 5. TransferOwnershipNode ─────────────────────────────────────────────────
+// ── 5. CartesianRetractNode ──────────────────────────────────────────────────
+
+CartesianRetractNode::CartesianRetractNode(
+  const std::string & name,
+  const BT::NodeConfig & config,
+  rclcpp::Node::SharedPtr node)
+: BT::StatefulActionNode(name, config),
+  node_(node)
+{
+}
+
+BT::NodeStatus CartesianRetractNode::onStart()
+{
+  std::string arm_name = "arm_1";
+  double dx = -0.130;
+  double dy = 0.0;
+  double dz = 0.0;
+  getInput("arm", arm_name);
+  getInput("dx", dx);
+  getInput("dy", dy);
+  getInput("dz", dz);
+
+  RCLCPP_INFO(
+    node_->get_logger(),
+    "[BT:CartesianRetract] Retracting arm '%s' linearly by (dx=%.3f, dy=%.3f, dz=%.3f)",
+    arm_name.c_str(), dx, dy, dz);
+
+  auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, arm_name);
+  move_group->setMaxVelocityScalingFactor(0.20);
+  move_group->setMaxAccelerationScalingFactor(0.20);
+
+  // Compute target waypoint relative to current end-effector pose
+  geometry_msgs::msg::PoseStamped current_pose = move_group->getCurrentPose();
+  geometry_msgs::msg::Pose target_pose = current_pose.pose;
+  target_pose.position.x += dx;
+  target_pose.position.y += dy;
+  target_pose.position.z += dz;
+
+  std::vector<geometry_msgs::msg::Pose> waypoints = { target_pose };
+  moveit_msgs::msg::RobotTrajectory trajectory;
+  double fraction = move_group->computeCartesianPath(waypoints, 0.005, trajectory, false);
+
+  if (fraction > 0.5) {
+    RCLCPP_INFO(
+      node_->get_logger(),
+      "[BT:CartesianRetract] Cartesian path fraction: %.2f for '%s'. Executing...",
+      fraction, arm_name.c_str());
+    execution_future_ = std::async(std::launch::async, [move_group, trajectory]() {
+      return move_group->execute(trajectory);
+    });
+  } else {
+    RCLCPP_WARN(
+      node_->get_logger(),
+      "[BT:CartesianRetract] Cartesian path fraction %.2f < 0.5. Falling back to target pose/named pose...",
+      fraction);
+    if (arm_name == "arm_1") {
+      move_group->setNamedTarget("handover_retract");
+    } else {
+      geometry_msgs::msg::PoseStamped target_stamped = current_pose;
+      target_stamped.pose = target_pose;
+      move_group->setPoseTarget(target_stamped);
+    }
+    moveit::planning_interface::MoveGroupInterface::Plan fallback_plan;
+    if (move_group->plan(fallback_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+      execution_future_ = std::async(std::launch::async, [move_group, fallback_plan]() {
+        return move_group->execute(fallback_plan);
+      });
+    } else {
+      RCLCPP_ERROR(node_->get_logger(), "[BT:CartesianRetract] Fallback planning failed");
+      return BT::NodeStatus::FAILURE;
+    }
+  }
+
+  return BT::NodeStatus::RUNNING;
+}
+
+BT::NodeStatus CartesianRetractNode::onRunning()
+{
+  if (execution_future_.wait_for(10ms) == std::future_status::ready) {
+    auto res = execution_future_.get();
+    if (res == moveit::core::MoveItErrorCode::SUCCESS) {
+      RCLCPP_INFO(node_->get_logger(), "[BT:CartesianRetract] Retract motion completed successfully");
+      return BT::NodeStatus::SUCCESS;
+    } else {
+      RCLCPP_WARN(node_->get_logger(), "[BT:CartesianRetract] Retract execution failed");
+      return BT::NodeStatus::FAILURE;
+    }
+  }
+  return BT::NodeStatus::RUNNING;
+}
+
+void CartesianRetractNode::onHalted()
+{
+  RCLCPP_INFO(node_->get_logger(), "[BT:CartesianRetract] Action halted");
+}
+
+// ── 6. TransferOwnershipNode ─────────────────────────────────────────────────
 
 TransferOwnershipNode::TransferOwnershipNode(
   const std::string & name,
@@ -650,6 +793,8 @@ TransferOwnershipNode::TransferOwnershipNode(
   auto qos_tl = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
   arm1_detach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm1/detach", qos_tl);
   arm2_attach_pub_ = node_->create_publisher<std_msgs::msg::Empty>("/arm2/attach", qos_tl);
+  planning_scene_diff_pub_ = node_->create_publisher<moveit_msgs::msg::PlanningScene>("/planning_scene", 10);
+  clear_octomap_client_ = node_->create_client<std_srvs::srv::Empty>("/clear_octomap");
 }
 
 BT::NodeStatus TransferOwnershipNode::tick()
@@ -696,6 +841,7 @@ BT::NodeStatus TransferOwnershipNode::tick()
   attach_obj.object.id = object_id;
   attach_obj.object.operation = attach_obj.object.ADD;
   attach_obj.touch_links = {
+    "<octomap>",
     "arm1_gripper_base_link",
     "arm1_gripper_left_finger",
     "arm1_gripper_right_finger",
@@ -712,6 +858,17 @@ BT::NodeStatus TransferOwnershipNode::tick()
     "table_link"
   };
   psi_->applyAttachedCollisionObject(attach_obj);
+
+  // Flush residual octomap voxels
+  if (clear_octomap_client_) {
+    if (clear_octomap_client_->wait_for_service(std::chrono::seconds(2))) {
+      auto req = std::make_shared<std_srvs::srv::Empty::Request>();
+      auto future = clear_octomap_client_->async_send_request(req);
+      future.wait_for(std::chrono::milliseconds(500));
+      RCLCPP_INFO(node_->get_logger(), "[BT:TransferOwnership] OctoMap cleared.");
+    }
+  }
+  std::this_thread::sleep_for(150ms);
 
   RCLCPP_INFO(node_->get_logger(), "[BT:TransferOwnership] Ownership transferred atomically in MoveIt and Gazebo");
   return BT::NodeStatus::SUCCESS;
@@ -746,6 +903,12 @@ void registerBirobotNodes(
     "MoveNamedPose",
     [node](const std::string & name, const BT::NodeConfig & config) {
       return std::make_unique<MoveNamedPoseNode>(name, config, node);
+    });
+
+  factory.registerBuilder<CartesianRetractNode>(
+    "CartesianRetract",
+    [node](const std::string & name, const BT::NodeConfig & config) {
+      return std::make_unique<CartesianRetractNode>(name, config, node);
     });
 
   factory.registerBuilder<TransferOwnershipNode>(

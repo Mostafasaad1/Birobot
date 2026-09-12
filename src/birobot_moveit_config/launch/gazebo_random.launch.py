@@ -20,6 +20,12 @@ from launch.actions import (
     SetEnvironmentVariable,
     TimerAction,
 )
+from launch.substitutions import (
+    Command,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -46,6 +52,11 @@ def generate_launch_description():
         name='GZ_SIM_RESOURCE_PATH',
         value=f"{vendor_dir}:{os.environ.get('GZ_SIM_RESOURCE_PATH', '')}"
     )
+    gz_gui_config_path = PathJoinSubstitution([
+        birobot_moveit_share,
+        'config',
+        'gazebo_gui.config'
+    ])
 
     # Declare launch arguments for spawn customization
     declared_args = [
@@ -66,7 +77,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'object_z',
-            default_value='0.08',
+            default_value='0.15',
             description='Spawn Z (m) for irregular_object_1',
         ),
         DeclareLaunchArgument(
@@ -153,6 +164,7 @@ def generate_launch_description():
         'moveit_controller_manager':
             'moveit_simple_controller_manager/MoveItSimpleControllerManager',
         'moveit_manage_controllers': False,
+        'trajectory_execution.allowed_start_tolerance': 0.05,
     }
 
     rviz_config_file = os.path.join(birobot_moveit_share, 'config', 'moveit.rviz')
@@ -163,7 +175,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        launch_arguments={
+            'gz_args': ['-r empty.sdf --gui-config ', gz_gui_config_path],
+            'on_exit_shutdown': 'true',
+        }.items(),
     )
 
     spawn_entity = Node(
@@ -189,14 +204,14 @@ def generate_launch_description():
         <link name="link">
           <inertial>
             <mass>0.5</mass>
-            <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.002</iyy><iyz>0</iyz><izz>0.002</izz></inertia>
+            <inertia><ixx>0.00193</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.00260</iyy><iyz>0</iyz><izz>0.00120</izz></inertia>
           </inertial>
           <visual name="visual">
-            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+            <geometry><box><size>0.15 0.08 0.20</size></box></geometry>
             <material><ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material>
           </visual>
           <collision name="collision">
-            <geometry><box><size>0.15 0.08 0.06</size></box></geometry>
+            <geometry><box><size>0.15 0.08 0.20</size></box></geometry>
           </collision>
         </link>
       </model>
@@ -206,10 +221,10 @@ def generate_launch_description():
         randomize_flag = context.launch_configurations.get('randomize', 'true').lower() in ('true', '1', 'yes')
         if randomize_flag:
             # Safe collaborative workspace bounds reachable by both arms and visible to overhead camera:
-            # X in [-0.05, 0.15] m, Y in [-0.18, 0.18] m, Z = 0.08 m, Yaw in [-1.57, 1.57] rad
+            # X in [-0.05, 0.15] m, Y in [-0.18, 0.18] m, Z = 0.15 m, Yaw in [-1.57, 1.57] rad
             spawn_x = str(round(random.uniform(-0.05, 0.15), 3))
             spawn_y = str(round(random.uniform(-0.18, 0.18), 3))
-            spawn_z = '0.08'
+            spawn_z = '0.15'
             spawn_yaw = str(round(random.uniform(-1.5708, 1.5708), 3))
             print(
                 f"\n=======================================================\n"
@@ -224,7 +239,7 @@ def generate_launch_description():
         else:
             spawn_x = context.launch_configurations.get('object_x', '0.10')
             spawn_y = context.launch_configurations.get('object_y', '0.05')
-            spawn_z = context.launch_configurations.get('object_z', '0.08')
+            spawn_z = context.launch_configurations.get('object_z', '0.15')
             spawn_yaw = context.launch_configurations.get('object_yaw', '0.40')
             print(
                 f"\n[GAZEBO FIXED SPAWN] irregular_object_1 fixed pose: "

@@ -11,6 +11,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "std_msgs/msg/empty.hpp"
+#include "std_srvs/srv/empty.hpp"
+#include "moveit_msgs/msg/planning_scene.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -28,7 +30,7 @@ inline geometry_msgs::msg::PoseStamped parsePoseString(const std::string & /*str
   // Default values
   pose.pose.position.x = 0.10;
   pose.pose.position.y = 0.05;
-  pose.pose.position.z = 0.08;
+  pose.pose.position.z = 0.15;
   pose.pose.orientation.x = 1.0;
   pose.pose.orientation.w = 0.0;
   return pose;
@@ -125,6 +127,8 @@ private:
   std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> psi_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm1_attach_pub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm2_attach_pub_;
+  rclcpp::Publisher<moveit_msgs::msg::PlanningScene>::SharedPtr planning_scene_diff_pub_;
+  rclcpp::Client<std_srvs::srv::Empty>::SharedPtr clear_octomap_client_;
   std::future<moveit::core::MoveItErrorCode> execution_future_;
   std::string current_object_id_;
 };
@@ -157,6 +161,37 @@ private:
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm1_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_arm2_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_dual_;
+  rclcpp::Client<std_srvs::srv::Empty>::SharedPtr clear_octomap_client_;
+  std::future<moveit::core::MoveItErrorCode> execution_future_;
+};
+
+/**
+ * @brief CartesianRetractNode: Retracts an arm linearly by (dx, dy, dz) using computeCartesianPath.
+ */
+class CartesianRetractNode : public BT::StatefulActionNode
+{
+public:
+  CartesianRetractNode(
+    const std::string & name,
+    const BT::NodeConfig & config,
+    rclcpp::Node::SharedPtr node);
+
+  static BT::PortsList providedPorts()
+  {
+    return {
+      BT::InputPort<std::string>("arm", "arm_1", "Arm planning group (arm_1 or arm_2)"),
+      BT::InputPort<double>("dx", -0.130, "Cartesian displacement in X (meters)"),
+      BT::InputPort<double>("dy", 0.0, "Cartesian displacement in Y (meters)"),
+      BT::InputPort<double>("dz", 0.0, "Cartesian displacement in Z (meters)")
+    };
+  }
+
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
+
+private:
+  rclcpp::Node::SharedPtr node_;
   std::future<moveit::core::MoveItErrorCode> execution_future_;
 };
 
@@ -187,6 +222,8 @@ private:
   std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> psi_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm1_detach_pub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr arm2_attach_pub_;
+  rclcpp::Publisher<moveit_msgs::msg::PlanningScene>::SharedPtr planning_scene_diff_pub_;
+  rclcpp::Client<std_srvs::srv::Empty>::SharedPtr clear_octomap_client_;
 };
 
 /**
