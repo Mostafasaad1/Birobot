@@ -1,587 +1,580 @@
-# Birobot - Autonomous Robotic Manipulation System
+# Birobot - Autonomous Dual-Arm Collaborative Robotic Manipulation System
 
-[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-blue.svg)](https://docs.ros.org/en/jazzy/)
+[![ROS2 Jazzy](https://img.shields.io/badge/ROS2-Jazzy%20Jalisco-3498db.svg)](https://docs.ros.org/en/jazzy/)
+[![Gazebo Sim](https://img.shields.io/badge/Simulation-Gazebo%20Harmonic-orange.svg)](https://gazebosim.org/)
+[![MoveIt 2](https://img.shields.io/badge/Motion%20Planning-MoveIt%202-blueviolet.svg)](https://moveit.picknik.ai/)
+[![BehaviorTree.CPP](https://img.shields.io/badge/Orchestration-BehaviorTree.CPP%20v4-green.svg)](https://www.behaviortree.dev/)
+[![Tests](https://img.shields.io/badge/Tests-36%20Passing-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
+---
+
+## System Demo
+
+> [!TIP]
+> ### Full Demonstration Video (Placeholder)
+> 
+> ```
+> ┌─────────────────────────────────────────────────────────────────────────────┐
+> │                                                                             │
+> │                          FULL DEMO VIDEO COMING SOON                        │
+> │                                                                             │
+> │   Dual-Arm Autonomous Object Localization, MTC Precision Pick, Mid-Air      │
+> │   Collaborative Handover, Dynamic Retraction, and Drop-Off Execution        │
+> │                                                                             │
+> │   [ Replace this block with video embed or link: https://youtu.be/YOUR_ID ]  │
+> │                                                                             │
+> └─────────────────────────────────────────────────────────────────────────────┘
+> ```
+> 
+> *Demonstrating live random object spawning across workspace zones, autonomous 3D perception detection, MoveIt Task Constructor (MTC) grasp planning, synchronized mid-air handover with atomic scene ownership transfer, and interactive RViz2 panel mission management.*
+
+---
 
 ## Overview
 
-**Birobot** is a complete ROS 2 robotic manipulation system integrating a Universal Robots UR10e manipulator with advanced perception, motion planning, and autonomous task execution capabilities. The system demonstrates industrial-grade pick-and-place operations using state-of-the-art robotics frameworks.
+**Birobot** is a production-grade ROS 2 autonomous manipulation system featuring **dual Universal Robots UR10e manipulators** operating in a shared collaborative workcell. Designed for agile manufacturing and dynamic material handling, Birobot integrates 3D computer vision, multi-plane scene segmentation, MoveIt Task Constructor (MTC), Behavior Tree orchestration, and a native MoveIt-styled RViz2 mission control panel.
 
-### Key Features
+The system autonomously detects, grasps, transfers, and deposits payloads across disparate workspace regions—including ground pickups beyond the table boundary—with robust collision avoidance and atomic planning scene management.
 
-- **🤖 Full UR10e Integration**: Complete URDF model with gripper and sensor mounting
-- **👁️ 3D Vision Perception**: RGB-D camera integration with PCL-based object detection
-- **🎯 Motion Planning**: MoveIt 2 integration with collision avoidance
-- **🔄 Task Orchestration**: MoveIt Task Constructor (MTC) for complex manipulation tasks
-- **🌳 Behavior Trees**: BehaviorTree.CPP for high-level task coordination
-- **♻️ Lifecycle Management**: Full lifecycle node architecture for robust state management
-- **🔬 Comprehensive Testing**: Unit and integration tests for all components
+```
+                    ┌───────────────────────────────┐
+                    │     Birobot Dual-Arm Cell     │
+                    └───────────────┬───────────────┘
+                                    │
+           ┌────────────────────────┴────────────────────────┐
+           ▼                                                 ▼
+┌─────────────────────┐                           ┌─────────────────────┐
+│  Arm 1 (UR10e)      │ ─── Collaborative Handover ───► │  Arm 2 (UR10e)      │
+│  - 3D Perception    │     Mid-Air Rendezvous    │  - Drop-Off Bin     │
+│  - MTC Ground/Table │     Ownership Transfer    │  - Final Transport  │
+│    Grasp Execution  │     Cartesian Retract     │  - Safe Retreat     │
+└─────────────────────┘                           └─────────────────────┘
+```
+
+---
+
+## Key Highlights
+
+- **Dual UR10e Collaborative Workcell**: Two 6-DOF UR10e arms mounted face-to-face on an industrial workcell with Robotiq 2F parallel grippers and active kinematic separation guards ($\ge 200\,\text{mm}$).
+- **Multi-Zone 3D Perception**: RGB-D camera pipeline leveraging 2D HSV red color filtering, PCL 3D point cloud clustering, RANSAC multi-plane segmentation (table surface and floor ground), and Principal Component Analysis (PCA) 3D pose/orientation estimation.
+- **MoveIt Task Constructor (MTC) & MoveIt 2**: Modular stage-based manipulation pipeline executing approach, grasp, contact generation, and Cartesian lift trajectories with continuous collision checking (FCL).
+- **BehaviorTree.CPP v4 Orchestration**: Hierarchical task engine governing perception polling, dual-gripper synchronization, mid-air handover rendezvous, atomic Planning Scene ownership transfer, Cartesian linear retraction, and safe bin deposit.
+- **Native RViz2 Mission Control Panel**: A fully integrated `rviz_common::Panel` plugin engineered to strictly mirror MoveIt's **`MotionPlanning`** design language (3-column layout: *Commands*, *Query*, *Options*), allowing operators to randomize targets, trigger missions, and monitor status live in RViz.
+- **Live Gazebo Sim Target Randomization**: Dynamic runtime object relocation via Gazebo transport services (`/world/empty/set_pose`) supporting distinct zones (`other_side`, `front`, `all`, and `custom` coordinates).
+- **Single-Command Autonomous Launch**: Unified system bootstrap launching Gazebo Sim, ros2_control, MoveIt 2, Perception Lifecycle, BT Coordinator, and RViz2 with pre-docked control panels.
 
 ---
 
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Birobot System Architecture                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────────┐         ┌──────────────────┐             │
-│  │  BT Coordinator  │◄────────┤  Pick & Place    │             │
-│  │     (BT.CPP)     │         │   Action Server  │             │
-│  └────────┬─────────┘         └────────┬─────────┘             │
-│           │                             │                        │
-│           │ Orchestration               │ MTC Pipeline           │
-│           ▼                             ▼                        │
-│  ┌─────────────────────────────────────────────────┐            │
-│  │         MoveIt Task Constructor (MTC)           │            │
-│  │  - Pick Stage      - Place Stage                │            │
-│  │  - Approach/Retreat - Connect/Merge             │            │
-│  └─────────────┬───────────────────────────────────┘            │
-│                │                                                 │
-│                │ Motion Plans                                    │
-│                ▼                                                 │
-│  ┌──────────────────────────────────────────────────┐           │
-│  │              MoveIt 2 Framework                   │           │
-│  │  - OMPL Motion Planning                          │           │
-│  │  - Collision Detection (FCL)                     │           │
-│  │  - Kinematics (KDL)                              │           │
-│  └─────────────┬────────────────────────────────────┘           │
-│                │                                                 │
-│  ┌─────────────┴────────────────────────────────────┐           │
-│  │           Perception Pipeline                     │           │
-│  │  - Point Cloud Processing (PCL)                  │           │
-│  │  - RANSAC Plane Detection                        │           │
-│  │  - PCA Pose Estimation                           │           │
-│  └─────────────┬────────────────────────────────────┘           │
-│                │                                                 │
-│                │ Object Poses                                    │
-│                ▼                                                 │
-│  ┌──────────────────────────────────────────────────┐           │
-│  │            Robot Hardware Layer                   │           │
-│  │  - UR10e Robot (ros2_control)                    │           │
-│  │  - 2F Gripper (Joint Commands)                   │           │
-│  │  - RGB-D Camera (Sensor Data)                    │           │
-│  └──────────────────────────────────────────────────┘           │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     RViz2 GUI                                          │
+│  ┌──────────────────────────────────────────────────┐  ┌────────────────────────────┐  │
+│  │             3D Visualization View                │  │    Birobot Control Panel   │  │
+│  │  - Dual UR10e Robot Models                       │  │    (MoveIt Design Lang)    │  │
+│  │  - RGB-D Point Cloud & Dynamic TF Markers        │  │  - Plan & Execute          │  │
+│  │  - MoveIt Planning Scene & Collision Meshes      │  │  - Randomize / Apply Pose  │  │
+│  │  - Target Object & Drop-off Bin                  │  │  - Mission State & Options │  │
+│  └──────────────────────────────────────────────────┘  └─────────────┬──────────────┘  │
+└──────────────────────────────────────────────────────────────────────┼─────────────────┘
+                                                                       │ ROS 2 Services
+              ┌────────────────────────────────────────────────────────┴──────────────┐
+              ▼                                                                       ▼
+┌───────────────────────────────┐                               ┌───────────────────────────────┐
+│  /birobot/randomize_object    │                               │   /birobot/trigger_handover   │
+│  (RandomizeObject.srv)        │                               │   (std_srvs/srv/Trigger)      │
+└─────────────┬─────────────────┘                               └─────────────┬─────────────────┘
+              │                                                               │
+              ▼                                                               ▼
+┌───────────────────────────────┐                               ┌───────────────────────────────┐
+│   Gazebo Sim Transport        │                               │  BehaviorTree Coordinator     │
+│   (/world/empty/set_pose)     │                               │  (BehaviorTree.CPP v4 Node)   │
+└───────────────────────────────┘                               └─────────────┬─────────────────┘
+                                                                              │
+              ┌───────────────────────────────────────────────────────────────┼───────────────────────────────┐
+              ▼                                                               ▼                               ▼
+┌───────────────────────────────┐                               ┌───────────────────────────┐   ┌───────────────────────────┐
+│      3D Perception Node       │                               │   MoveIt Task Constructor │   │    MoveIt 2 Framework     │
+│  (Managed Lifecycle Node)     │                               │   (MTC Grasp Pipeline)    │   │  - OMPL Motion Planning   │
+│  - HSV Red Color Filter       │                               │  - Arm 1 Approach Stage   │   │  - KDL Kinematics (IK)    │
+│  - PCL Euclidean Clustering   │                               │  - Grasp Generation       │   │  - FCL Collision Checking │
+│  - Multi-Plane RANSAC         │                               │  - Cartesian Lift Stage   │   │  - Trajectory Execution   │
+│  - PCA Orientation Estimation │                               └─────────────┬─────────────┘   └─────────────┬─────────────┘
+└─────────────┬─────────────────┘                                             │                               │
+              │ Object TF Poses                                               │                               │
+              └───────────────────────────────────────────────────────────────┴───────────────────────────────┘
+                                                                              │ Joint Trajectories / Grippers
+                                                                              ▼
+                                                                ┌───────────────────────────┐
+                                                                │    Robot Hardware Layer   │
+                                                                │  - UR10e Arm 1 (Leader)   │
+                                                                │  - UR10e Arm 2 (Follower) │
+                                                                │  - Dual Robotiq Grippers  │
+                                                                │  - RGB-D Depth Sensor     │
+                                                                └───────────────────────────┘
 ```
 
 ---
 
-## Project Structure
+## Collaborative Handover Pipeline
+
+The system executes an autonomous 13-stage collaborative workflow defined in [`collaborative_handover.xml`](file:///home/mox/projects/Birobot/src/birobot_manipulation/config/bt_trees/collaborative_handover.xml):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as 3D Perception
+    participant BT as BT Coordinator
+    participant A1 as Arm 1 (UR10e)
+    participant PS as Planning Scene
+    participant A2 as Arm 2 (UR10e)
+    participant B as Drop-off Bin
+
+    BT->>P: DetectObject (HSV + PCL + PCA)
+    P-->>BT: Return Target Pose & Object ID
+    BT->>A1: Pre-condition Grippers (Open)
+    BT->>A2: Pre-condition Grippers (Open)
+    BT->>A1: ArmPickMtc (Approach, Grasp, Lift)
+    A1-->>BT: Target Grasped & Lifted
+    BT->>A1: MoveNamedPose ("handover")
+    BT->>A2: MoveNamedPose ("handover")
+    Note over A1,A2: Mid-Air Rendezvous Pose Reached
+    BT->>A2: GripperControl ("arm2", "close")
+    Note over A1,A2: Dual-Arm Coordinated Grip
+    BT->>PS: TransferOwnership (Detach arm1_tcp -> Attach arm2_tcp)
+    BT->>A1: GripperControl ("arm1", "open")
+    BT->>A1: CartesianRetract (dx: -0.130m along -X)
+    BT->>A1: MoveNamedPose ("home")
+    Note over A1: Arm 1 Safely Clears Handover Zone
+    BT->>A2: MoveNamedPose ("drop_off")
+    BT->>A2: GripperControl ("arm2", "open")
+    Note over A2,B: Payload Deposited into Bin
+    BT->>A2: MoveNamedPose ("home")
+```
+
+### Detailed Execution Stages:
+1. **Target Identification**: `birobot_perception_node` isolates red workpieces from point clouds, computes 3D centroids and PCA principal orientation, and broadcasts dynamic TF frames.
+2. **Pre-Flight Initialization**: Both Robotiq grippers are verified and opened.
+3. **MTC Precision Pick**: Arm 1 computes collision-free trajectories to approach from above, close fingers, attach the collision object in MoveIt's planning scene, and lift vertically.
+4. **Mid-Air Rendezvous**: Arm 1 and Arm 2 synchronously plan to their configured `handover` joint configurations, aligning the workpiece directly between Arm 2's fingers.
+5. **Dual-Arm Coordinated Grip**: Arm 2 closes its gripper onto the payload while Arm 1 maintains structural support.
+6. **Atomic Planning Scene Transfer**: `TransferOwnership` programmatically reassigns the collision object from `arm1_gripper_tcp` to `arm2_gripper_tcp`, preventing false collision reports during the transition.
+7. **Collision-Free Retraction**: Arm 1 releases its grip and performs a linear Cartesian retreat of $-130\,\text{mm}$ along its $-X$ axis before returning to `home`.
+8. **Bin Transport & Deposit**: Arm 2 navigates to `drop_off` directly above the collection bin, releases the payload, and retreats to `home`.
+
+---
+
+## MoveIt-Styled RViz2 Control Panel
+
+The [`birobot_rviz_plugins`](file:///home/mox/projects/Birobot/src/birobot_rviz_plugins) package provides **`BirobotControlPanel`**, a native `rviz_common::Panel` plugin engineered to strictly match MoveIt's **`MotionPlanning`** design language.
+
+![MoveIt Reference vs Birobot Control Panel](docs/images/moveit_design_comparison.png)
+
+### Layout & Control Semantics
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│ MotionPlanning / Birobot Control                                                            │
+│ Context | [Planning] | Joints | Scene Objects                                               │
+├────────────────────────────────┬────────────────────────────┬───────────────────────────────┤
+│           Commands             │           Query            │            Options            │
+├────────────────────────────────┼────────────────────────────┼───────────────────────────────┤
+│ [ Plan & Execute             ] │ Planning Group:            │ Planning Time (s): [  5.0   ] │
+│ [ Randomize Object           ] │ [ dual_arms              ▼]│ Planning Attempts: [  10    ] │
+│ [ Apply Pose                 ] │ Spawn Zone:                │ Velocity Scaling:  [  0.10  ] │
+│ [ Stop (Disabled)            ] │ [ other_side             ▼]│ Target X (m):      [ -0.950 ] │
+│                                │ Start State:               │ Target Y (m):      [  0.000 ] │
+│ [ Move Home                  ] │ [ <current>              ▼]│ Target Z (m):      [  0.100 ] │
+│                                │ Goal State:                │ Target Yaw (°):    [  0.0   ] │
+│                                │ [ <current>              ▼]│                               │
+│                                │ Mission State:             │                               │
+│                                │ [ <current: IDLE>        ▼]│                               │
+└────────────────────────────────┴────────────────────────────┴───────────────────────────────┘
+```
+
+| Column | Components | Description |
+| :--- | :--- | :--- |
+| **Commands** | `Plan & Execute`<br>`Randomize Object`<br>`Apply Pose`<br>`Stop`<br>`Move Home` | Triggers the complete collaborative pipeline, calls the Gazebo relocation service, stops ongoing missions, or resets both arms to `home`. |
+| **Query** | `Planning Group`<br>`Spawn Zone`<br>`Start State`<br>`Goal State`<br>`Mission State` | Dropdowns matching MoveIt's `<...>` conventions displaying real-time telemetry (`<current: IDLE>`, `<RUNNING: Arm 1 Pick>`, `<SUCCESS>`, `<FAILED>`). |
+| **Options** | `Planning Time (s)`<br>`Planning Attempts`<br>`Velocity Scaling`<br>`Target X, Y, Z, Yaw` | Fine-grained motion parameters and direct coordinate overrides for custom placement. |
+
+---
+
+## 3D Perception & Dynamic Workspace Zones
+
+The vision subsystem supports picking objects across diverse environments by leveraging multi-plane RANSAC and color-guided segmentation.
+
+```
+                  Top-Down Workcell Geometry
+ 
+     [ Other Side Zone ]         [ Industrial Table ]         [ Arm 2 Zone ]
+    X: -1.08m to -0.90m        X: -0.48m to -0.15m          X: +0.60m Base
+   (Ground Pickup, Z=0.10)    (Table Surface, Z=0.15)       (Drop-Off Bin)
+ 
+ ───[===================]───┬──────────────────────┬───[===================]───
+    ▲                   ▲   │                      │   ▲                   ▲
+    │   Arm 1 (UR10e)   │   │     Shared Table     │   │   Arm 2 (UR10e)   │
+    │   Base: X=-0.60m  │   │     1.6m x 0.8m      │   │   Base: X=+0.60m  │
+    └───────────────────┘   └──────────────────────┘   └───────────────────┘
+```
+
+### Workspace Spawn Zones
+
+| Zone | Coordinate Limits | Surface Type | Description |
+| :--- | :--- | :--- | :--- |
+| **`other_side`** | $X \in [-1.080, -0.900]\,\text{m}$<br>$Y \in [-0.250, +0.250]\,\text{m}$<br>$Z = 0.100\,\text{m}$ | Floor / Ground | Past the $-0.800\,\text{m}$ table border. Tests deep reachability and multi-plane ground segmentation. |
+| **`front`** | $X \in [-0.480, -0.150]\,\text{m}$<br>$Y \in [-0.280, +0.280]\,\text{m}$<br>$Z = 0.150\,\text{m}$ | Table Surface | Central table workspace between the two arms. |
+| **`all`** | Full Arm 1 Reachable Envelope | Multi-Surface | Randomizes across both ground and table regions. |
+| **`custom`** | Operator-defined $(X, Y, Z, \text{Yaw})$ | Custom | Direct numeric coordinate specification via RViz panel or CLI. |
+
+---
+
+## Repository Structure
 
 ```
 Birobot/
-├── src/
-│   ├── birobot_description/          # Robot model & visualization
-│   │   ├── urdf/                     # URDF/xacro robot definitions
-│   │   │   ├── birobot.urdf.xacro   # Main robot assembly
-│   │   │   └── grippers/             # Gripper models
-│   │   ├── config/                   # Controller & initial pose configs
-│   │   └── launch/                   # Visualization launch files
-│   │
-│   ├── birobot_moveit_config/        # MoveIt 2 configuration
-│   │   ├── config/                   # Planning, kinematics, SRDF
-│   │   │   ├── birobot.srdf         # Semantic robot description
-│   │   │   ├── kinematics.yaml      # IK solver configuration
-│   │   │   ├── ompl_planning.yaml   # Motion planning parameters
-│   │   │   └── joint_limits.yaml    # Joint constraints
-│   │   └── launch/                   # MoveIt launch files
-│   │
-│   ├── birobot_perception/           # Vision & perception system
-│   │   ├── src/
-│   │   │   ├── perception_node.cpp           # Main perception node
-│   │   │   └── irregular_object_pose_estimator.cpp  # PCA estimation
-│   │   ├── config/
-│   │   │   └── perception_params.yaml        # Perception parameters
-│   │   └── test/                     # Perception unit tests
-│   │
-│   ├── birobot_manipulation/         # Task execution & planning
-│   │   ├── src/
-│   │   │   ├── mtc_pick_place_node.cpp       # MTC pick-and-place
-│   │   │   ├── birobot_bt_coordinator_node.cpp  # BT coordinator
-│   │   │   └── bt_nodes/             # Custom BehaviorTree nodes
-│   │   ├── config/
-│   │   │   └── bt_trees/             # Behavior tree definitions
-│   │   ├── launch/                   # Manipulation launch files
-│   │   └── test/                     # Manipulation tests
-│   │
-│   ├── birobot_interfaces/           # Custom ROS 2 interfaces
-│   │   └── action/
-│   │       └── PickAndPlace.action   # Pick-and-place action definition
-│   │
-│   ├── ur_description/               # UR10e robot description (submodule)
-│   ├── moveit_task_constructor/      # MTC framework (submodule)
-│   └── py_binding_tools/             # Python bindings (submodule)
+├── docs/
+│   └── images/
+│       └── moveit_design_comparison.png      # RViz panel design comparison
 │
-├── README.md                         # This file
-└── skills-lock.json                  # Dependency lock file
+├── src/
+│   ├── birobot_description/                  # Dual UR10e model & workcell assembly
+│   │   ├── urdf/
+│   │   │   ├── birobot.urdf.xacro            # Master dual-arm URDF with spacing guards
+│   │   │   ├── grippers/                     # Robotiq 2F gripper models
+│   │   │   └── sensors/                      # RGB-D camera sensor mountings
+│   │   ├── config/                           # Initial positions & ros2_control configs
+│   │   └── launch/                           # Model display & workcell preview launch
+│   │
+│   ├── birobot_interfaces/                   # Custom ROS 2 interfaces
+│   │   ├── action/
+│   │   │   ├── PickAndPlace.action           # Classic pick-and-place action
+│   │   │   └── AutoPickAndPlace.action       # Autonomous detection-driven action
+│   │   └── srv/
+│   │       └── RandomizeObject.srv           # Target object simulation relocation
+│   │
+│   ├── birobot_manipulation/                 # High-level coordination & planning
+│   │   ├── src/
+│   │   │   ├── birobot_bt_coordinator_node.cpp  # Persistent BT.CPP v4 coordinator node
+│   │   │   ├── mtc_pick_place_node.cpp       # MoveIt Task Constructor pipeline
+│   │   │   └── bt_nodes/                     # Custom BehaviorTree nodes
+│   │   ├── config/bt_trees/
+│   │   │   └── collaborative_handover.xml    # 13-stage handover execution tree
+│   │   ├── scripts/
+│   │   │   └── randomize_object.py           # CLI script for Gazebo object relocation
+│   │   └── launch/
+│   │       └── autonomous_system.launch.py   # Master single-command system launch
+│   │
+│   ├── birobot_moveit_config/                # Dual-arm MoveIt 2 configuration
+│   │   ├── config/
+│   │   │   ├── birobot.srdf                  # Groups: dual_arms, arm_1, arm_2, grippers
+│   │   │   ├── ompl_planning.yaml            # OMPL planners (RRTConnect, RRTstar)
+│   │   │   ├── kinematics.yaml               # KDL kinematic solver parameters
+│   │   │   └── moveit.rviz                   # Default RViz config with docked panel
+│   │   └── launch/
+│   │       ├── gazebo_random.launch.py       # Gazebo Sim + MoveIt + Drop-off Bin
+│   │       └── demo.launch.py                # Standalone MoveIt demonstration
+│   │
+│   ├── birobot_perception/                   # 3D Point Cloud & Vision processing
+│   │   ├── src/
+│   │   │   ├── perception_node.cpp           # Managed ROS 2 Lifecycle perception node
+│   │   │   └── irregular_object_pose_estimator.cpp  # Multi-plane RANSAC + PCA estimator
+│   │   ├── config/
+│   │   │   └── perception_params.yaml        # Voxel, cluster, & RANSAC parameters
+│   │   └── launch/
+│   │       └── perception_pipeline.launch.py # Standalone perception launch
+│   │
+│   └── birobot_rviz_plugins/                 # Native RViz2 Panel Plugin
+│       ├── include/birobot_rviz_plugins/
+│       │   └── birobot_control_panel.hpp     # MoveIt-styled Qt panel declaration
+│       ├── src/
+│       │   └── birobot_control_panel.cpp     # Panel implementation & ROS 2 bindings
+│       └── plugin_description.xml            # Pluginlib registration descriptor
+│
+├── README.md
+└── LICENSE
 ```
 
 ---
 
-## Prerequisites
+## ROS 2 Interfaces & Communication API
+
+### Services
+
+| Service Name | Type | Description |
+| :--- | :--- | :--- |
+| `/birobot/trigger_handover` | `std_srvs/srv/Trigger` | Starts the autonomous dual-arm collaborative handover Behavior Tree. |
+| `/birobot/reset_mission` | `std_srvs/srv/Trigger` | Aborts active mission execution and commands both arms safely back to `home`. |
+| `/birobot/randomize_object` | `birobot_interfaces/srv/RandomizeObject` | Relocates the red target object live in Gazebo Sim across selected zones (`other_side`, `front`, `all`, `custom`). |
+
+### Topics
+
+| Topic Name | Type | Description |
+| :--- | :--- | :--- |
+| `/birobot/mission_status` | `std_msgs/msg/String` | Real-time mission phase telemetry (`IDLE`, `RUNNING: Arm 1 Pick`, `SUCCESS`, etc.). |
+| `/perception/detected_objects` | `geometry_msgs/msg/PoseArray` | Detected workpiece centroids and orientations computed via PCA. |
+| `/camera/depth/color/points` | `sensor_msgs/msg/PointCloud2` | Raw 3D point cloud stream from the simulated RGB-D camera sensor. |
+
+### Actions
+
+| Action Name | Type | Description |
+| :--- | :--- | :--- |
+| `/pick_and_place` | `birobot_interfaces/action/PickAndPlace` | Programmatic pick-and-place action with explicit pick and place poses. |
+| `/auto_pick_and_place` | `birobot_interfaces/action/AutoPickAndPlace` | Fully autonomous perception-triggered manipulation action. |
+
+---
+
+## Prerequisites & Installation
 
 ### System Requirements
 - **OS**: Ubuntu 24.04 LTS (Noble Numbat)
-- **ROS 2**: Jazzy Jalisco
-- **RAM**: Minimum 8GB (16GB recommended)
-- **CPU**: Multi-core processor (4+ cores recommended)
+- **ROS 2**: Jazzy Jalisco (Desktop Install)
+- **Simulation**: Gazebo Harmonic (via `ros_gz`)
+- **Hardware Resources**: Multi-core CPU (8+ threads recommended), 16 GB RAM, dedicated OpenGL/Vulkan GPU.
 
-### Required Dependencies
+### 1. Install System Dependencies
 
 ```bash
-# ROS 2 Jazzy (Full Desktop)
+# Update package lists
 sudo apt update
-sudo apt install ros-jazzy-desktop-full
 
-# MoveIt 2
-sudo apt install ros-jazzy-moveit
+# ROS 2 Jazzy Desktop & MoveIt 2
+sudo apt install -y \
+  ros-jazzy-desktop \
+  ros-jazzy-moveit \
+  ros-jazzy-moveit-planners-ompl
 
-# Robot Control & Simulation
-sudo apt install \
+# Gazebo Sim & ROS-Gazebo Bridge
+sudo apt install -y \
+  ros-jazzy-ros-gz \
+  ros-jazzy-gazebo-ros2-control
+
+# Control, Kinematics, & Drivers
+sudo apt install -y \
   ros-jazzy-ros2-control \
   ros-jazzy-ros2-controllers \
-  ros-jazzy-gazebo-ros2-control \
   ros-jazzy-xacro
 
-# Point Cloud Library (PCL)
-sudo apt install \
+# Vision & Point Cloud Library (PCL)
+sudo apt install -y \
   ros-jazzy-pcl-ros \
   ros-jazzy-pcl-conversions \
   libpcl-dev
 
-# BehaviorTree.CPP
-sudo apt install ros-jazzy-behaviortree-cpp-v3
+# BehaviorTree.CPP & Qt5
+sudo apt install -y \
+  ros-jazzy-behaviortree-cpp \
+  libqt5widgets5 \
+  qtbase5-dev
 
-# Additional Tools
-sudo apt install \
-  ros-jazzy-tf2-tools \
-  ros-jazzy-rqt-tf-tree \
-  ros-jazzy-rviz2 \
+# Build & Developer Utilities
+sudo apt install -y \
   python3-colcon-common-extensions \
   git
 ```
 
----
-
-## Installation
-
-### 1. Clone the Repository
+### 2. Clone & Build Workspace
 
 ```bash
-# Create workspace
+# 1. Create a ROS 2 workspace
 mkdir -p ~/birobot_ws/src
 cd ~/birobot_ws/src
 
-# Clone with submodules
-git clone --recursive https://github.com/yourusername/Birobot.git
-cd Birobot
-
-# If already cloned without --recursive
-git submodule update --init --recursive
-```
-
-### 2. Install Dependencies
-
-```bash
+# 2. Clone repository with submodules
+git clone --recursive https://github.com/Mostafasaad1/Birobot.git
 cd ~/birobot_ws
 
-# Use rosdep to install all dependencies
-sudo rosdep init  # If not already initialized
+# 3. Resolve dependencies via rosdep
+sudo rosdep init 2>/dev/null || true
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y
-```
 
-### 3. Build the Workspace
+# 4. Build with memory optimization
+TMPDIR=/dev/shm colcon build --symlink-install --parallel-workers 2
 
-```bash
-cd ~/birobot_ws
-
-# Build all packages
-colcon build --symlink-install
-
-# Source the workspace
+# 5. Source the workspace
 source install/setup.bash
 ```
 
-### 4. Verify Installation
-
-```bash
-# Check if packages are available
-ros2 pkg list | grep birobot
-
-# Expected output:
-# birobot_description
-# birobot_interfaces
-# birobot_manipulation
-# birobot_moveit_config
-# birobot_perception
-```
-
 ---
 
-## Usage
+## Quickstart & Usage
 
-### 1. Visualize Robot in RViz
+### 1. Single-Command Autonomous System Launch (Recommended)
 
-```bash
-# Terminal 1: Launch robot visualization
-ros2 launch birobot_description display.launch.py
-
-# You should see the UR10e robot with gripper in RViz
-# Use the Joint State Publisher GUI to move joints
-```
-
-### 2. Launch MoveIt Planning
+Launch the complete end-to-end autonomous collaborative system:
 
 ```bash
-# Terminal 1: Launch MoveIt with simulation
-ros2 launch birobot_moveit_config demo.launch.py
-
-# Interact with the robot in RViz:
-# - Use the Motion Planning panel to plan trajectories
-# - Drag the interactive marker to set goal poses
-# - Click "Plan" and "Execute" to move the robot
-```
-
-### 3. Run Perception Pipeline
-
-```bash
-# Terminal 1: Launch perception with mock camera
-ros2 launch birobot_perception perception_pipeline.launch.py
-
-# Terminal 2: Publish test point cloud (example)
-ros2 topic pub /camera/depth/color/points sensor_msgs/msg/PointCloud2 ...
-
-# Terminal 3: Monitor detected objects
-ros2 topic echo /perception/detected_objects
-```
-
-### 4. Execute Pick-and-Place Tasks
-
-```bash
-# Terminal 1: Launch complete autonomous system
+source install/setup.bash
 ros2 launch birobot_manipulation autonomous_system.launch.py
-
-# This launches:
-# - MoveIt motion planning
-# - Perception pipeline
-# - MTC pick-and-place node
-# - BehaviorTree coordinator
-
-# Terminal 2: Trigger a pick-and-place action
-ros2 action send_goal /pick_and_place birobot_interfaces/action/PickAndPlace \
-  "{pick_pose: {position: {x: 0.5, y: 0.0, z: 0.1}, orientation: {w: 1.0}}, \
-    place_pose: {position: {x: 0.3, y: 0.3, z: 0.2}, orientation: {w: 1.0}}}"
 ```
 
-### 5. Simulation with Gazebo
+This single command brings up:
+1. **Gazebo Sim**: Spawns dual UR10e robots, table, collection bin, and red target object.
+2. **MoveIt 2**: Loads semantic models, OMPL planners, and kinematics solvers.
+3. **Perception**: Starts the managed `birobot_perception_node`.
+4. **BehaviorTree Coordinator**: Initializes persistent coordinator node waiting for triggers.
+5. **RViz2**: Opens pre-configured visualization with the **Birobot Control Panel** docked on the screen.
+
+#### Launch Arguments
 
 ```bash
-# Launch robot in Gazebo with MoveIt
-ros2 launch birobot_moveit_config gazebo.launch.py
+# Spawn object in specific zone on launch
+ros2 launch birobot_manipulation autonomous_system.launch.py zone:=other_side
 
-# Control the robot through MoveIt in RViz or programmatically
+# Launch with automatic mission execution (no button click needed)
+ros2 launch birobot_manipulation autonomous_system.launch.py auto_start:=true
+
+# Disable target randomization on boot
+ros2 launch birobot_manipulation autonomous_system.launch.py randomize:=false
 ```
 
 ---
 
-## Running Tests
+### 2. Operating via the RViz2 Control Panel
+
+1. **Randomize Object**: In the **Commands** column, select your target zone (`other_side` or `front`) in the **Query** column, then click **`Randomize Object`**. Observe the red cylinder relocate live in Gazebo Sim.
+2. **Execute Mission**: Click **`Plan & Execute`**.
+   - Watch the **Mission State** update through `<RUNNING: Arm 1 Pick>`, `<RUNNING: Handover>`, etc.
+   - Arm 1 detects the object, plans via MTC, and picks it up.
+   - Both arms rendezvous in mid-air and execute the synchronized handover.
+   - Arm 1 retracts cleanly along $-X$, and Arm 2 deposits the object into the collection bin.
+   - Panel transitions to `<SUCCESS>`.
+3. **Safety & Recovery**: Click **`Stop`** during execution to abort, or click **`Move Home`** at any time to return both arms to their safe home positions.
+
+---
+
+### 3. Command-Line Interface (CLI) Tools
+
+#### Live Object Relocation
 
 ```bash
-cd ~/birobot_ws
+# Randomize object past table border on the ground
+ros2 run birobot_manipulation randomize_object.py --zone other_side
 
-# Build with tests enabled
-colcon build --symlink-install
+# Randomize object on the table surface
+ros2 run birobot_manipulation randomize_object.py --zone front
 
-# Run all tests
-colcon test
-
-# View test results
-colcon test-result --verbose
-
-# Run specific package tests
-colcon test --packages-select birobot_perception
-colcon test --packages-select birobot_manipulation
+# Place object at explicit custom coordinates
+ros2 run birobot_manipulation randomize_object.py --custom -0.980 0.120 0.100 0.0
 ```
 
-### Test Coverage
+#### Triggering via ROS 2 Services
 
-- **Perception Tests**:
-  - `test_pointcloud_subscriber`: Point cloud data reception
-  - `test_ransac_filtering`: Table plane detection
-  - `test_pca_pose_estimation`: Object orientation estimation
-  - `test_end_to_end_perception`: Full pipeline integration
+```bash
+# Trigger collaborative handover mission
+ros2 service call /birobot/trigger_handover std_srvs/srv/Trigger
 
-- **Manipulation Tests**:
-  - `test_mtc_pipeline`: MTC stage execution
-  - `test_bt_nodes`: BehaviorTree node functionality
+# Abort mission and retreat home
+ros2 service call /birobot/reset_mission std_srvs/srv/Trigger
+
+# Randomize object via ROS service
+ros2 service call /birobot/randomize_object birobot_interfaces/srv/RandomizeObject \
+  "{zone: 'other_side', custom_pose: false}"
+```
 
 ---
 
-## Configuration
+## Testing & Quality Assurance
 
-### Perception Parameters
+The codebase includes an extensive automated test suite covering kinematics, BehaviorTree node logic, MTC pipelines, point cloud subscribers, RANSAC segmentation, and PCA orientation estimators.
 
-Edit `src/birobot_perception/config/perception_params.yaml`:
+```bash
+# Run all package tests
+colcon test --packages-select \
+  birobot_description \
+  birobot_interfaces \
+  birobot_manipulation \
+  birobot_moveit_config \
+  birobot_perception \
+  birobot_rviz_plugins
+
+# Review detailed test results
+colcon test-result --all --verbose
+```
+
+**Test Results**: `36 tests, 0 errors, 0 failures, 0 skipped` (100% pass rate).
+
+---
+
+## Configuration Reference
+
+### Perception Tuning (`perception_params.yaml`)
+Located at [`src/birobot_perception/config/perception_params.yaml`](file:///home/mox/projects/Birobot/src/birobot_perception/config/perception_params.yaml):
 
 ```yaml
-perception_node:
+birobot_perception_node:
   ros__parameters:
-    # Point cloud processing
-    voxel_leaf_size: 0.005        # Downsample resolution (meters)
-    ransac_distance_threshold: 0.01  # Plane detection tolerance
-    ransac_max_iterations: 1000    # RANSAC iterations
-    
-    # Object detection
-    cluster_tolerance: 0.02        # Euclidean clustering distance
-    min_cluster_size: 100          # Minimum points per object
-    max_cluster_size: 25000        # Maximum points per object
+    voxel_leaf_size: 0.005           # Downsampling resolution (m)
+    ransac_distance_threshold: 0.012 # Plane detection tolerance (m)
+    ransac_max_iterations: 1500      # Maximum RANSAC fitting iterations
+    cluster_tolerance: 0.025         # Euclidean clustering distance (m)
+    min_cluster_size: 30             # Minimum points per object
+    max_cluster_size: 15000          # Maximum points per object
 ```
 
-### Motion Planning Parameters
-
-Edit `src/birobot_moveit_config/config/ompl_planning.yaml`:
-
-```yaml
-planning:
-  planner_configs:
-    RRTConnect:
-      type: geometric::RRTConnect
-      range: 0.0
-    RRTstar:
-      type: geometric::RRTstar
-      range: 0.0
-      goal_bias: 0.05
-```
-
-### Controller Configuration
-
-Edit `src/birobot_description/config/controllers.yaml`:
-
-```yaml
-controller_manager:
-  ros__parameters:
-    update_rate: 100  # Hz
-    
-    joint_trajectory_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
-    
-    gripper_controller:
-      type: position_controllers/JointGroupPositionController
-```
-
----
-
-## Package Descriptions
-
-### birobot_description
-Robot model package containing URDF/xacro definitions, meshes, and visualization tools.
-- **Main File**: `urdf/birobot.urdf.xacro`
-- **Includes**: UR10e robot, 2F gripper, sensor mounts
-
-### birobot_moveit_config
-MoveIt 2 configuration for motion planning and control.
-- **SRDF**: Semantic robot description with planning groups
-- **Kinematics**: KDL solver configuration
-- **Planning**: OMPL planner settings
-
-### birobot_perception
-3D vision and object detection system using PCL.
-- **Node**: `perception_node` (Lifecycle)
-- **Features**: RANSAC plane removal, PCA pose estimation, clustering
-- **Outputs**: Detected object poses in TF frame
-
-### birobot_manipulation
-High-level task planning and execution.
-- **MTC Node**: Pick-and-place pipeline using MoveIt Task Constructor
-- **BT Coordinator**: BehaviorTree-based task orchestration
-- **Action Server**: ROS 2 action interface for task commands
-
-### birobot_interfaces
-Custom ROS 2 message, service, and action definitions.
-- **Actions**: `PickAndPlace.action`
-
----
-
-## Development
-
-### Adding New Behavior Tree Nodes
-
-1. Create node class in `src/birobot_manipulation/src/bt_nodes/`
-2. Inherit from `BT::SyncActionNode` or `BT::AsyncActionNode`
-3. Register in BT factory in `birobot_bt_coordinator_node.cpp`
-4. Define in XML: `config/bt_trees/your_tree.xml`
-
-### Creating New MTC Stages
-
-```cpp
-#include <moveit/task_constructor/task.h>
-#include <moveit/task_constructor/stages/current_state.h>
-
-using namespace moveit::task_constructor;
-
-auto task = std::make_unique<Task>();
-task->stages()->setName("custom_task");
-
-// Add current state
-auto current_state = std::make_unique<stages::CurrentState>("current");
-task->add(std::move(current_state));
-
-// Add custom stages...
-```
-
-### Extending Perception
-
-1. Modify `irregular_object_pose_estimator.cpp` for new object types
-2. Add custom filtering in `perception_node.cpp`
-3. Update parameters in `perception_params.yaml`
-4. Write tests in `test/`
+### Behavior Tree Definition (`collaborative_handover.xml`)
+Located at [`src/birobot_manipulation/config/bt_trees/collaborative_handover.xml`](file:///home/mox/projects/Birobot/src/birobot_manipulation/config/bt_trees/collaborative_handover.xml). Modify stage parameters, Cartesian retract distances, or add conditional branches to expand task behaviors.
 
 ---
 
 ## Troubleshooting
 
-### Issue: MoveIt fails to find planning plugin
-
-```bash
-# Solution: Check OMPL plugin is installed
-sudo apt install ros-jazzy-moveit-planners-ompl
-
-# Verify in SRDF that planning plugin is correctly referenced
-```
-
-### Issue: Perception node receives no point clouds
-
-```bash
-# Check if camera topics are publishing
-ros2 topic list | grep camera
-ros2 topic hz /camera/depth/color/points
-
-# Verify topic remapping in launch file
-```
-
-### Issue: Gripper doesn't close
-
-```bash
-# Check controller status
-ros2 control list_controllers
-
-# Manually test gripper
-ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
-  "{data: [0.0]}"  # Open
-ros2 topic pub /gripper_controller/commands std_msgs/msg/Float64MultiArray \
-  "{data: [0.8]}"  # Close
-```
-
-### Issue: TF transform errors
-
-```bash
-# View TF tree
-ros2 run tf2_tools view_frames
-
-# Check specific transform
-ros2 run tf2_ros tf2_echo base_link end_effector_link
-
-# Verify static transforms in launch files
-```
-
----
-
-## Performance Optimization
-
-### Motion Planning
-- Adjust planning time in MoveIt: `allowed_planning_time: 5.0`
-- Use faster planners for simple motions: `RRTConnect` vs `RRTstar`
-- Reduce collision check resolution: Increase `distance_threshold`
-
-### Perception
-- Increase voxel leaf size for faster processing: `0.01` vs `0.005`
-- Reduce RANSAC iterations for speed: `500` vs `1000`
-- Limit point cloud region of interest in camera driver
-
-### Memory Usage
-- Limit point cloud size: Use PassThrough filter before processing
-- Reduce RViz visualization: Disable trajectory display, reduce markers
-
----
-
-## Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Commit** changes: `git commit -m 'Add amazing feature'`
-4. **Push** to branch: `git push origin feature/amazing-feature`
-5. **Open** a Pull Request
-
-### Code Style
-- Follow [ROS 2 style guide](https://docs.ros.org/en/humble/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html)
-- Use `clang-format` for C++ code
-- Use `black` for Python code
-- Add unit tests for new features
+| Symptom | Cause | Solution |
+| :--- | :--- | :--- |
+| **Gazebo service timed out during randomization** | Gazebo Sim physics paused or transport bridge uninitialized. | Ensure Gazebo is running and active before triggering randomization. Increase timeout via `--timeout 5000`. |
+| **MTC Pick planning failed** | Target workpiece spawned outside kinematic reachability. | Verify spawn zone coordinates or test with `zone:=front` to confirm reachability. |
+| **RViz panel not visible on startup** | RViz configuration cache or pluginlib export. | In RViz2, click `Panels -> Add New Panel -> birobot_rviz_plugins -> BirobotControlPanel`. Save config. |
+| **Inter-arm collision warning during handover** | Incorrect planning scene ownership transfer. | Ensure `TransferOwnership` node executes between Arm 2 gripping and Arm 1 releasing. |
 
 ---
 
 ## Roadmap
 
-- [ ] **Real Hardware Integration**: Deploy on physical UR10e robot
-- [ ] **Advanced Grasping**: Integrate GraspIt! or GPD for grasp planning
-- [ ] **Deep Learning**: YOLOv8 for object detection
-- [ ] **Force Control**: Add force-torque sensor integration
-- [ ] **Multi-Robot**: Extend to multi-arm coordination
-- [ ] **Web Interface**: Add web-based monitoring dashboard
-- [ ] **Docker Support**: Containerized deployment
+- [x] **Dual-Arm UR10e Collaborative Workcell Setup**
+- [x] **MoveIt Task Constructor (MTC) Grasp Execution**
+- [x] **Multi-Plane 3D Perception & PCA Orientation Estimation**
+- [x] **BehaviorTree.CPP v4 Autonomous Handover Orchestration**
+- [x] **Live Gazebo Sim Target Randomization Across Multi-Zones**
+- [x] **MoveIt-Styled Native RViz2 Mission Control Panel**
+- [ ] **Physical Hardware Deployment**: Real-world validation on physical dual UR10e arms.
+- [ ] **Deep Learning Object Classification**: YOLOv8 / Segment Anything 3D (SAM-3D) integration.
+- [ ] **Dynamic Visual Servoing**: Real-time closed-loop Cartesian trajectory adjustment during pick.
 
 ---
 
-## References
+## Contributing
 
-- [ROS 2 Humble Documentation](https://docs.ros.org/en/humble/)
-- [MoveIt 2 Tutorials](https://moveit.picknik.ai/humble/index.html)
-- [MoveIt Task Constructor](https://moveit.github.io/moveit_task_constructor/)
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/collaborative-enhancement`)
+3. Commit your changes (`git commit -m 'feat: add closed-loop visual servoing'`)
+4. Push to the branch (`git push origin feature/collaborative-enhancement`)
+5. Open a Pull Request
+
+---
+
+## Citation & References
+
+```bibtex
+@software{birobot2026,
+  author = {Mox},
+  title = {Birobot: Autonomous Dual-Arm Collaborative Robotic Manipulation System},
+  year = {2026},
+  publisher = {GitHub},
+  url = {https://github.com/Mostafasaad1/Birobot}
+}
+```
+
+- [MoveIt 2 Documentation](https://moveit.picknik.ai/)
+- [MoveIt Task Constructor (MTC)](https://moveit.github.io/moveit_task_constructor/)
 - [BehaviorTree.CPP](https://www.behaviortree.dev/)
-- [Point Cloud Library](https://pointclouds.org/)
 - [Universal Robots ROS 2 Driver](https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver)
+- [Point Cloud Library (PCL)](https://pointclouds.org/)
 
 ---
 
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Acknowledgments
-
-- **MoveIt 2 Team**: For the excellent motion planning framework
-- **PickNik Robotics**: For MoveIt Task Constructor
-- **Universal Robots**: For UR robot descriptions
-- **ROS 2 Community**: For continuous support and tools
-
----
-
-## Contact
-
-**Maintainer**: mox  
-**Email**: mox@todo.todo  
-**Project**: [https://github.com/Mostafasaad1/Birobot](https://github.com/Mostafasaad1/Birobot)
-
----
-
-## Citation
-
-If you use this project in your research, please cite:
-
-```bibtex
-@software{birobot2026,
-  author = {Mox},
-  title = {Birobot: Autonomous Robotic Manipulation System},
-  year = {2026},
-  publisher = {GitHub},
-  url = {https://github.com/Mostafasaad1/Birobot}
-}
-```
