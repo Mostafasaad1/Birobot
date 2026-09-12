@@ -90,22 +90,37 @@ def main():
         help='Target Yaw orientation in radians'
     )
     parser.add_argument(
-        '--random', action='store_true', default=False,
-        help='Force random repositioning within dual-arm safe bounds'
+        '--zone', default='all', choices=['all', 'other_side', 'front'],
+        help='Spawn zone around Arm 1: all, other_side (rear/flanks X < -0.58), or front (X > -0.58)'
     )
     args = parser.parse_args()
 
-    # If neither x nor y specified, or --random set, pick random safe bounds
+    # If neither x nor y specified, or --random set, pick random safe bounds in Arm 1 workspace
     if args.random or (args.x is None and args.y is None):
-        target_x = round(random.uniform(-0.05, 0.15), 3)
-        target_y = round(random.uniform(-0.18, 0.18), 3)
+        while True:
+            r = random.uniform(0.24, 0.48)
+            theta = random.uniform(-2.53, 2.53)  # +/- 145 deg (290 deg spread)
+            x_val = -0.60 + r * math.cos(theta)
+            y_val = r * math.sin(theta)
+            if math.hypot(x_val - (-0.60), y_val) < 0.22:
+                continue
+            if math.hypot(x_val - (-0.10), y_val - (-0.22)) < 0.16:
+                continue
+            if args.zone == 'other_side' and x_val >= -0.58:
+                continue
+            if args.zone == 'front' and x_val <= -0.58:
+                continue
+            if -0.74 <= x_val <= -0.15 and -0.32 <= y_val <= 0.32:
+                break
+        target_x = round(x_val, 3)
+        target_y = round(y_val, 3)
         target_z = 0.15
         target_yaw = round(random.uniform(-1.5708, 1.5708), 3)
     else:
-        target_x = args.x if args.x is not None else 0.10
-        target_y = args.y if args.y is not None else 0.05
+        target_x = args.x if args.x is not None else -0.35
+        target_y = args.y if args.y is not None else 0.00
         target_z = args.z
-        target_yaw = args.yaw if args.yaw is not None else 0.40
+        target_yaw = args.yaw if args.yaw is not None else 0.00
 
     success = set_gazebo_pose(args.name, target_x, target_y, target_z, target_yaw)
     sys.exit(0 if success else 1)

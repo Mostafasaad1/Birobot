@@ -379,6 +379,11 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       tf2::Quaternion q_p15; q_p15.setRPY(0.0, 0.0, 0.2618);
       tf2::Quaternion q_m15; q_m15.setRPY(0.0, 0.0, -0.2618);
 
+      // Pitch tilts (-15 deg, -25 deg, +15 deg) around TCP Y for reaching near base singularity
+      tf2::Quaternion q_pitch_m15; q_pitch_m15.setRPY(0.0, -0.2618, 0.0);
+      tf2::Quaternion q_pitch_m25; q_pitch_m25.setRPY(0.0, -0.4363, 0.0);
+      tf2::Quaternion q_pitch_p15; q_pitch_p15.setRPY(0.0, 0.2618, 0.0);
+
       struct GraspCandidate {
         tf2::Quaternion q;
         const char* label;
@@ -386,10 +391,16 @@ BT::NodeStatus ArmPickMtcNode::onStart()
       std::vector<GraspCandidate> candidates = {
         { q_base, "perception 3D PCA orientation" },
         { q_flip, "perception orientation (180° flip)" },
-        { (q_base * q_p15).normalized(), "perception orientation (+15° tolerance)" },
-        { (q_base * q_m15).normalized(), "perception orientation (-15° tolerance)" },
-        { (q_flip * q_p15).normalized(), "perception 180° flip (+15° tolerance)" },
-        { (q_flip * q_m15).normalized(), "perception 180° flip (-15° tolerance)" },
+        { (q_base * q_p15).normalized(), "perception orientation (+15° yaw)" },
+        { (q_base * q_m15).normalized(), "perception orientation (-15° yaw)" },
+        { (q_flip * q_p15).normalized(), "perception 180° flip (+15° yaw)" },
+        { (q_flip * q_m15).normalized(), "perception 180° flip (-15° yaw)" },
+        { (q_base * q_pitch_m15).normalized(), "perception orientation (-15° pitch tilt)" },
+        { (q_base * q_pitch_m25).normalized(), "perception orientation (-25° pitch tilt)" },
+        { (q_base * q_pitch_p15).normalized(), "perception orientation (+15° pitch tilt)" },
+        { (q_flip * q_pitch_m15).normalized(), "perception 180° flip (-15° pitch tilt)" },
+        { (q_flip * q_pitch_m25).normalized(), "perception 180° flip (-25° pitch tilt)" },
+        { (q_flip * q_pitch_p15).normalized(), "perception 180° flip (+15° pitch tilt)" },
       };
 
       moveit::core::MoveItErrorCode err = moveit::core::MoveItErrorCode::FAILURE;

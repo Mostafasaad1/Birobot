@@ -4,6 +4,7 @@ with dynamic randomized spawn for irregular_object_1 in the collaborative dual-a
 and full sensor bridges for PointCloud2, RGB Image, Depth Image, and CameraInfo.
 """
 
+import math
 import os
 import random
 import shutil
@@ -63,16 +64,21 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'randomize',
             default_value='true',
-            description='Randomize red irregular_object_1 spawn within dual-arm collaborative workspace',
+            description='Randomize red irregular_object_1 spawn within Arm 1 workspace',
+        ),
+        DeclareLaunchArgument(
+            'zone',
+            default_value='all',
+            description='Spawn zone around Arm 1: "all" (full 290 deg workspace), "other_side" (rear/flanks X < -0.58), or "front" (inbound X > -0.58)',
         ),
         DeclareLaunchArgument(
             'object_x',
-            default_value='0.10',
+            default_value='-0.35',
             description='Spawn X (m) for irregular_object_1 when randomize is false',
         ),
         DeclareLaunchArgument(
             'object_y',
-            default_value='0.05',
+            default_value='0.00',
             description='Spawn Y (m) for irregular_object_1 when randomize is false',
         ),
         DeclareLaunchArgument(
@@ -82,7 +88,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'object_yaw',
-            default_value='0.40',
+            default_value='0.00',
             description='Spawn Yaw (rad) for irregular_object_1 when randomize is false',
         ),
     ]
@@ -219,28 +225,60 @@ def generate_launch_description():
 
     def spawn_object_1_factory(context, *args, **kwargs):
         randomize_flag = context.launch_configurations.get('randomize', 'true').lower() in ('true', '1', 'yes')
+        zone = context.launch_configurations.get('zone', 'all').lower()
         if randomize_flag:
-            # Safe collaborative workspace bounds reachable by both arms and visible to overhead camera:
-            # X in [-0.05, 0.15] m, Y in [-0.18, 0.18] m, Z = 0.15 m, Yaw in [-1.57, 1.57] rad
-            spawn_x = str(round(random.uniform(-0.05, 0.15), 3))
-            spawn_y = str(round(random.uniform(-0.18, 0.18), 3))
+            # Polar fan distribution around Arm 1 base (-0.60, 0.0)
+            # Full 290-degree angular spread (-145 deg to +145 deg), R in [0.24, 0.48] m
+            # Covers both front workspace (X > -0.58) and other side / rear flanks (X < -0.58)
+            while True:
+                r = random.uniform(0.24, 0.48)
+                theta = random.uniform(-2.53, 2.53)  # +/- 145 deg
+                x_val = -0.60 + r * math.cos(theta)
+                y_val = r * math.sin(theta)
+
+                # Keep clear of arm base pedestal (radius 0.085m + object margin)
+                if math.hypot(x_val - (-0.60), y_val) < 0.22:
+                    continue
+                # Keep clear of obstacle 2 at (-0.10, -0.22)
+                if math.hypot(x_val - (-0.10), y_val - (-0.22)) < 0.16:
+                    continue
+                # Zone filter:
+                # "other_side" forces X < -0.58 (strictly on the rear/flank of Arm 1)
+                # "front" forces X > -0.58 (in front of Arm 1)
+                if zone in ('other_side', 'otherside', 'rear', 'back') and x_val >= -0.58:
+                    continue
+                if zone in ('front', 'infront') and x_val <= -0.58:
+                    continue
+                # Ensure within table bounds (table is [-0.80, 0.80] x [-0.40, 0.40])
+                # Keep object center >= 6cm inside edges:
+                if -0.74 <= x_val <= -0.15 and -0.32 <= y_val <= 0.32:
+                    break
+
+            spawn_x = str(round(x_val, 3))
+            spawn_y = str(round(y_val, 3))
             spawn_z = '0.15'
             spawn_yaw = str(round(random.uniform(-1.5708, 1.5708), 3))
+            dist_base = round(math.hypot(float(spawn_x) - (-0.60), float(spawn_y)), 3)
+            angle_base = round(math.degrees(math.atan2(float(spawn_y), float(spawn_x) - (-0.60))), 1)
+            side_label = "OTHER SIDE (rear/flank)" if float(spawn_x) < -0.58 else "FRONT (inbound)"
             print(
                 f"\n=======================================================\n"
-                f"[GAZEBO RANDOM SPAWN] Spawned irregular_object_1 dynamically:\n"
-                f"  X   = {spawn_x} m\n"
-                f"  Y   = {spawn_y} m\n"
-                f"  Z   = {spawn_z} m\n"
-                f"  Yaw = {spawn_yaw} rad\n"
+                f"[GAZEBO RANDOM SPAWN] Spawned irregular_object_1 in Arm 1 workspace ({side_label}):\n"
+                f"  X     = {spawn_x} m\n"
+                f"  Y     = {spawn_y} m\n"
+                f"  Z     = {spawn_z} m\n"
+                f"  Yaw   = {spawn_yaw} rad ({math.degrees(float(spawn_yaw)):.1f} deg)\n"
+                f"  Dist  = {dist_base} m from Arm 1 base\n"
+                f"  Angle = {angle_base} deg relative to Arm 1\n"
+                f"  Zone  = {zone}\n"
                 f"=======================================================\n",
                 flush=True
             )
         else:
-            spawn_x = context.launch_configurations.get('object_x', '0.10')
-            spawn_y = context.launch_configurations.get('object_y', '0.05')
+            spawn_x = context.launch_configurations.get('object_x', '-0.35')
+            spawn_y = context.launch_configurations.get('object_y', '0.00')
             spawn_z = context.launch_configurations.get('object_z', '0.15')
-            spawn_yaw = context.launch_configurations.get('object_yaw', '0.40')
+            spawn_yaw = context.launch_configurations.get('object_yaw', '0.00')
             print(
                 f"\n[GAZEBO FIXED SPAWN] irregular_object_1 fixed pose: "
                 f"x={spawn_x}, y={spawn_y}, z={spawn_z}, yaw={spawn_yaw}\n",
@@ -292,8 +330,8 @@ def generate_launch_description():
             '-string', obj2_sdf,
             '-name', 'irregular_object_2',
             '-world', 'empty',
-            '-x', '-0.15',
-            '-y', '-0.10',
+            '-x', '-0.10',
+            '-y', '-0.22',
             '-z', '0.075',
             '-Y', '-0.8',
         ],

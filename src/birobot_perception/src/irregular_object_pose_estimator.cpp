@@ -52,7 +52,7 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   min_valid_points_ = declare_parameter<int>("min_valid_points", 100);
 
   // Workspace Bounding Box Parameters (crops out overhead robot arms, floor, outside tables)
-  workspace_min_x_ = declare_parameter<double>("workspace_min_x", -0.45);
+  workspace_min_x_ = declare_parameter<double>("workspace_min_x", -0.76);
   workspace_max_x_ = declare_parameter<double>("workspace_max_x", 0.45);
   workspace_min_y_ = declare_parameter<double>("workspace_min_y", -0.35);
   workspace_max_y_ = declare_parameter<double>("workspace_max_y", 0.35);
@@ -575,6 +575,11 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
     if (pt.x >= workspace_min_x_ && pt.x <= workspace_max_x_ &&
         pt.y >= workspace_min_y_ && pt.y <= workspace_max_y_ &&
         pt.z >= workspace_min_z_ && pt.z <= workspace_max_z_) {
+      // Exclude points on or directly around Arm 1 base pedestal (-0.60, 0.0)
+      double dist_arm1 = std::hypot(pt.x - (-0.60), pt.y - 0.0);
+      if (dist_arm1 < 0.15) {
+        continue;
+      }
       workspace_cloud->points.push_back(pt);
     }
   }

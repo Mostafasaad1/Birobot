@@ -56,6 +56,11 @@ def generate_launch_description():
             default_value='true',
             description='Randomize red object spawn pose in Gazebo',
         ),
+        DeclareLaunchArgument(
+            'zone',
+            default_value='all',
+            description='Spawn zone around Arm 1: "all", "other_side" (rear/flanks X < -0.58), or "front" (inbound X > -0.58)',
+        ),
     ]
 
     # 1. Base Gazebo Sim + MoveIt 2 + RViz2 + ros2_control + Drop-off Bin
@@ -63,7 +68,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_moveit, 'launch', 'gazebo_random.launch.py')
         ),
-        launch_arguments={'randomize': LaunchConfiguration('randomize')}.items(),
+        launch_arguments={
+            'randomize': LaunchConfiguration('randomize'),
+            'zone': LaunchConfiguration('zone'),
+        }.items(),
     )
 
     # 2. 3D Perception Managed Lifecycle Node

@@ -17,8 +17,8 @@ birobot_perception_node:
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
     min_valid_points: 100
-    # Workspace bounding box: filters out overhead robot links (Z > 0.35m) and outside boundaries
-    workspace_min_x: -0.45
+    # Workspace bounding box: covers entire table including other side of Arm 1 (X down to -0.76m)
+    workspace_min_x: -0.76
     workspace_max_x: 0.45
     workspace_min_y: -0.35
     workspace_max_y: 0.35

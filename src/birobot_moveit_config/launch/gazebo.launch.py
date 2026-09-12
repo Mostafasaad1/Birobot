@@ -1,8 +1,12 @@
 """
 gazebo.launch.py — Birobot launch bringing up Gazebo Sim + MoveIt 2 + RViz2 + ros2_control + Workspace Objects
+with dynamic randomized spawn for irregular_object_1 in the collaborative dual-arm & camera workspace,
+and full sensor bridges for PointCloud2, RGB Image, Depth Image, and CameraInfo.
 """
 
+import math
 import os
+import random
 import shutil
 import tempfile
 import yaml
@@ -10,10 +14,18 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
+    DeclareLaunchArgument,
     IncludeLaunchDescription,
+    OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
     TimerAction,
+)
+from launch.substitutions import (
+    Command,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
 )
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -41,6 +53,45 @@ def generate_launch_description():
         name='GZ_SIM_RESOURCE_PATH',
         value=f"{vendor_dir}:{os.environ.get('GZ_SIM_RESOURCE_PATH', '')}"
     )
+    gz_gui_config_path = PathJoinSubstitution([
+        birobot_moveit_share,
+        'config',
+        'gazebo_gui.config'
+    ])
+
+    # Declare launch arguments for spawn customization
+    declared_args = [
+        DeclareLaunchArgument(
+            'randomize',
+            default_value='true',
+            description='Randomize red irregular_object_1 spawn within Arm 1 workspace',
+        ),
+        DeclareLaunchArgument(
+            'zone',
+            default_value='all',
+            description='Spawn zone around Arm 1: "all" (full 290 deg workspace), "other_side" (rear/flanks X < -0.58), or "front" (inbound X > -0.58)',
+        ),
+        DeclareLaunchArgument(
+            'object_x',
+            default_value='-0.35',
+            description='Spawn X (m) for irregular_object_1 when randomize is false',
+        ),
+        DeclareLaunchArgument(
+            'object_y',
+            default_value='0.00',
+            description='Spawn Y (m) for irregular_object_1 when randomize is false',
+        ),
+        DeclareLaunchArgument(
+            'object_z',
+            default_value='0.15',
+            description='Spawn Z (m) for irregular_object_1',
+        ),
+        DeclareLaunchArgument(
+            'object_yaw',
+            default_value='0.00',
+            description='Spawn Yaw (rad) for irregular_object_1 when randomize is false',
+        ),
+    ]
 
     # ── 1. URDF / robot_description ──────────────────────────────────────────
     original_controllers_yaml_path = os.path.join(
@@ -130,7 +181,10 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
         ),
-        launch_arguments={'gz_args': '-r empty.sdf'}.items(),
+        launch_arguments={
+            'gz_args': ['-r empty.sdf --gui-config ', gz_gui_config_path],
+            'on_exit_shutdown': 'true',
+        }.items(),
     )
 
     spawn_entity = Node(
@@ -169,20 +223,86 @@ def generate_launch_description():
       </model>
     </sdf>"""
 
-    spawn_object_1 = Node(
-        package='ros_gz_sim',
-        executable='create',
-        arguments=[
-            '-string', obj1_sdf,
-            '-name', 'irregular_object_1',
-            '-world', 'empty',
-            '-x', '0.10',
-            '-y', '0.05',
-            '-z', '0.15',
-            '-Y', '0.4',
-        ],
-        output='screen',
-    )
+    def spawn_object_1_factory(context, *args, **kwargs):
+        randomize_flag = context.launch_configurations.get('randomize', 'true').lower() in ('true', '1', 'yes')
+        zone = context.launch_configurations.get('zone', 'all').lower()
+        if randomize_flag:
+            # Polar fan distribution around Arm 1 base (-0.60, 0.0)
+            # Full 290-degree angular spread (-145 deg to +145 deg), R in [0.24, 0.48] m
+            # Covers both front workspace (X > -0.58) and other side / rear flanks (X < -0.58)
+            while True:
+                r = random.uniform(0.24, 0.48)
+                theta = random.uniform(-2.53, 2.53)  # +/- 145 deg
+                x_val = -0.60 + r * math.cos(theta)
+                y_val = r * math.sin(theta)
+
+                # Keep clear of arm base pedestal (radius 0.085m + object margin)
+                if math.hypot(x_val - (-0.60), y_val) < 0.22:
+                    continue
+                # Keep clear of obstacle 2 at (-0.10, -0.22)
+                if math.hypot(x_val - (-0.10), y_val - (-0.22)) < 0.16:
+                    continue
+                # Zone filter:
+                # "other_side" forces X < -0.58 (strictly on the rear/flank of Arm 1)
+                # "front" forces X > -0.58 (in front of Arm 1)
+                if zone in ('other_side', 'otherside', 'rear', 'back') and x_val >= -0.58:
+                    continue
+                if zone in ('front', 'infront') and x_val <= -0.58:
+                    continue
+                # Ensure within table bounds (table is [-0.80, 0.80] x [-0.40, 0.40])
+                # Keep object center >= 6cm inside edges:
+                if -0.74 <= x_val <= -0.15 and -0.32 <= y_val <= 0.32:
+                    break
+
+            spawn_x = str(round(x_val, 3))
+            spawn_y = str(round(y_val, 3))
+            spawn_z = '0.15'
+            spawn_yaw = str(round(random.uniform(-1.5708, 1.5708), 3))
+            dist_base = round(math.hypot(float(spawn_x) - (-0.60), float(spawn_y)), 3)
+            angle_base = round(math.degrees(math.atan2(float(spawn_y), float(spawn_x) - (-0.60))), 1)
+            side_label = "OTHER SIDE (rear/flank)" if float(spawn_x) < -0.58 else "FRONT (inbound)"
+            print(
+                f"\n=======================================================\n"
+                f"[GAZEBO RANDOM SPAWN] Spawned irregular_object_1 in Arm 1 workspace ({side_label}):\n"
+                f"  X     = {spawn_x} m\n"
+                f"  Y     = {spawn_y} m\n"
+                f"  Z     = {spawn_z} m\n"
+                f"  Yaw   = {spawn_yaw} rad ({math.degrees(float(spawn_yaw)):.1f} deg)\n"
+                f"  Dist  = {dist_base} m from Arm 1 base\n"
+                f"  Angle = {angle_base} deg relative to Arm 1\n"
+                f"  Zone  = {zone}\n"
+                f"=======================================================\n",
+                flush=True
+            )
+        else:
+            spawn_x = context.launch_configurations.get('object_x', '-0.35')
+            spawn_y = context.launch_configurations.get('object_y', '0.00')
+            spawn_z = context.launch_configurations.get('object_z', '0.15')
+            spawn_yaw = context.launch_configurations.get('object_yaw', '0.00')
+            print(
+                f"\n[GAZEBO FIXED SPAWN] irregular_object_1 fixed pose: "
+                f"x={spawn_x}, y={spawn_y}, z={spawn_z}, yaw={spawn_yaw}\n",
+                flush=True
+            )
+
+        return [
+            Node(
+                package='ros_gz_sim',
+                executable='create',
+                arguments=[
+                    '-string', obj1_sdf,
+                    '-name', 'irregular_object_1',
+                    '-world', 'empty',
+                    '-x', spawn_x,
+                    '-y', spawn_y,
+                    '-z', spawn_z,
+                    '-Y', spawn_yaw,
+                ],
+                output='screen',
+            )
+        ]
+
+    spawn_object_1_action = OpaqueFunction(function=spawn_object_1_factory)
 
     obj2_sdf = """<sdf version="1.6">
       <model name="irregular_object_2">
@@ -210,8 +330,8 @@ def generate_launch_description():
             '-string', obj2_sdf,
             '-name', 'irregular_object_2',
             '-world', 'empty',
-            '-x', '-0.15',
-            '-y', '-0.10',
+            '-x', '-0.10',
+            '-y', '-0.22',
             '-z', '0.075',
             '-Y', '-0.8',
         ],
@@ -270,22 +390,24 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Parameter Bridge — clock and sensor data (bidirectional @, one-way [ or ])
+    # Parameter Bridge — clock and sensor data (PointCloud2, RGB Image, Depth Image, CameraInfo)
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/birobot/depth_camera/points/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            '/birobot/depth_camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/birobot/depth_camera/points@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/birobot/depth_camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
+        ],
+        remappings=[
+            ('/birobot/depth_camera/points', '/birobot/depth_camera/depth_image'),
         ],
         output='screen'
     )
 
     # Dedicated bridge for attach/detach signals with TRANSIENT_LOCAL QoS.
-    # The DetachableJoint plugin fires on the first message; if the bridge misses it
-    # due to startup ordering, the object is never constrained.
-    # transient_local durability causes the bridge to store the last message and
-    # replay it to Gazebo's plugin as soon as the sim-side subscriber connects.
     attach_detach_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -296,7 +418,6 @@ def generate_launch_description():
             '/arm2/detach@std_msgs/msg/Empty]gz.msgs.Empty',
         ],
         parameters=[{
-            # Set QoS for all ROS-side topics in this bridge instance (both pub and sub)
             'qos_overrides./arm1/attach.publisher.durability': 'transient_local',
             'qos_overrides./arm1/attach.publisher.reliability': 'reliable',
             'qos_overrides./arm1/attach.subscription.durability': 'transient_local',
@@ -446,16 +567,18 @@ def generate_launch_description():
         )
     )
 
-    return LaunchDescription([
-        set_gz_resource_path,
-        gazebo_sim,
-        clock_bridge,
-        attach_detach_bridge,
-        spawn_entity,
-        spawn_object_1,
-        spawn_object_2,
-        spawn_bin,
-        robot_state_publisher,
-        load_jsb,
-        load_arm_controllers_and_moveit,
-    ])
+    return LaunchDescription(
+        declared_args + [
+            set_gz_resource_path,
+            gazebo_sim,
+            clock_bridge,
+            attach_detach_bridge,
+            spawn_entity,
+            spawn_object_1_action,
+            spawn_object_2,
+            spawn_bin,
+            robot_state_publisher,
+            load_jsb,
+            load_arm_controllers_and_moveit,
+        ]
+    )
