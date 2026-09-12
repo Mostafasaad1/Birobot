@@ -489,22 +489,22 @@ Visualization Manager:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /birobot/depth_camera/points/image
+        Reliability Policy: Reliable
+        Value: /birobot/depth_camera/image
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Max Value: 2
+      Max Value: 3
       Median window: 5
-      Min Value: 0
+      Min Value: 0.1
       Name: Camera Depth
       Normalize Range: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /birobot/depth_camera/points/depth_image
+        Reliability Policy: Reliable
+        Value: /birobot/depth_camera/depth_image
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true

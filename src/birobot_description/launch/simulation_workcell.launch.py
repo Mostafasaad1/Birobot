@@ -108,8 +108,11 @@ def launch_setup(context, *args, **kwargs):
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             ('/birobot/depth_camera/points/points'
              '@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked'),
-            '/birobot/depth_camera/points/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
-            '/birobot/depth_camera/points/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/birobot/depth_camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
+            '/birobot/depth_camera/points@sensor_msgs/msg/Image[gz.msgs.Image',
+        ],
+        remappings=[
+            ('/birobot/depth_camera/points', '/birobot/depth_camera/depth_image'),
         ],
         output='screen'
     )
