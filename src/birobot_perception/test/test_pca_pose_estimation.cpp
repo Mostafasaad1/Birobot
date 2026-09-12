@@ -67,3 +67,24 @@ TEST_F(PCAPoseEstimationTest, CentroidAndQuaternionCalculation)
 
   EXPECT_NEAR(q_norm, 1.0, 1e-4);
 }
+
+TEST_F(PCAPoseEstimationTest, RedColor2DDetection)
+{
+  auto node = std::make_shared<birobot_perception::IrregularObjectPoseEstimator>();
+  node->configure();
+
+  // Create a 640x480 neutral background synthetic image
+  cv::Mat test_img(480, 640, CV_8UC3, cv::Scalar(160, 160, 160));
+
+  // Draw a bright red rectangle centered at (300, 200) with size 100x50
+  cv::rectangle(test_img, cv::Rect(250, 175, 100, 50), cv::Scalar(20, 20, 220), -1);
+
+  cv::Point2f centroid_2d;
+  cv::RotatedRect min_rect;
+  cv::Mat debug_img;
+  bool detected = node->detect_red_object_2d(test_img, centroid_2d, min_rect, debug_img);
+
+  EXPECT_TRUE(detected);
+  EXPECT_NEAR(centroid_2d.x, 300.0f, 2.0f);
+  EXPECT_NEAR(centroid_2d.y, 200.0f, 2.0f);
+}

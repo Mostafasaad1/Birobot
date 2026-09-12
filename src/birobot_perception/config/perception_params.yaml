@@ -17,3 +17,11 @@ birobot_perception_node:
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
     min_valid_points: 100
+    input_rgb_image_topic: "/birobot/depth_camera/image"
+    enable_color_filtering: true
+    hsv_red_h_low_1: 0
+    hsv_red_h_high_1: 15
+    hsv_red_h_low_2: 165
+    hsv_red_h_high_2: 180
+    hsv_red_s_min: 70
+    hsv_red_v_min: 40

@@ -18,10 +18,14 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common segmentation filters search cluster)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(OpenCV REQUIRED)
 
 include_directories(
   include
   ${PCL_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 link_directories(${PCL_LIBRARY_DIRS})
@@ -47,8 +51,13 @@ ament_target_dependencies(irregular_object_pose_estimator_lib
   tf2_geometry_msgs
   tf2_sensor_msgs
   pcl_conversions
+  cv_bridge
+  image_transport
 )
-target_link_libraries(irregular_object_pose_estimator_lib ${PCL_LIBRARIES})
+target_link_libraries(irregular_object_pose_estimator_lib
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
 
 # Node Executable
 add_executable(birobot_perception_node
