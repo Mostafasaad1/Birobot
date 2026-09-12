@@ -429,7 +429,7 @@ bool IrregularObjectPoseEstimator::is_cluster_red(
     try {
       geometry_msgs::msg::PoseStamped pose_world, pose_cam;
       pose_world.header.frame_id = target_frame_;
-      pose_world.header.stamp = tf2::TimePointZero;
+      pose_world.header.stamp = rclcpp::Time(0, 0);
       pose_world.pose = cluster_pose;
 
       if (tf_buffer_->canTransform("depth_camera_optical_frame", target_frame_, tf2::TimePointZero)) {
