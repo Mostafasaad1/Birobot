@@ -11,23 +11,9 @@
 
 ## System Demo
 
-> [!TIP]
-> ### Full Demonstration Video (Placeholder)
-> 
-> ```
-> ┌─────────────────────────────────────────────────────────────────────────────┐
-> │                                                                             │
-> │                          FULL DEMO VIDEO COMING SOON                        │
-> │                                                                             │
-> │   Dual-Arm Autonomous Object Localization, MTC Precision Pick, Mid-Air      │
-> │   Collaborative Handover, Dynamic Retraction, and Drop-Off Execution        │
-> │                                                                             │
-> │   [ Replace this block with video embed or link: https://youtu.be/YOUR_ID ]  │
-> │                                                                             │
-> └─────────────────────────────────────────────────────────────────────────────┘
-> ```
-> 
-> *Demonstrating live random object spawning across workspace zones, autonomous 3D perception detection, MoveIt Task Constructor (MTC) grasp planning, synchronized mid-air handover with atomic scene ownership transfer, and interactive RViz2 panel mission management.*
+https://github.com/user-attachments/assets/b469f9d0-8861-494c-ae87-61acdfb93ec8
+
+*Demonstrating live random object spawning across workspace zones, autonomous 3D perception detection, MoveIt Task Constructor (MTC) grasp planning, synchronized mid-air handover with atomic scene ownership transfer, and interactive RViz2 panel mission management.*
 
 ---
 
