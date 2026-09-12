@@ -10,6 +10,15 @@ Panels:
         - /MotionPlanning1/Planning Request1
       Splitter Ratio: 0.5
     Tree Height: 316
+  - Class: birobot_rviz_plugins/BirobotControlPanel
+    CustomX: -0.95
+    CustomY: 0
+    CustomYaw: 0
+    CustomZ: 0.1
+    Name: Birobot Mission Control
+    PlanningTime: 5
+    VelocityScaling: 0.1
+    ZoneIndex: 0
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Views
@@ -479,7 +488,7 @@ Visualization Manager:
       Value: true
       Velocity_Scaling_Factor: 0.1
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -491,9 +500,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /birobot/depth_camera/image
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 3
       Median window: 5
       Min Value: 0.10000000149011612
@@ -505,9 +514,9 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /birobot/depth_camera/depth_image
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -519,7 +528,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /birobot/perception/red_object_detection_image
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Perception Target Markers
@@ -650,8 +659,6 @@ Visualization Manager:
           Value: true
         grasp_target_4:
           Value: true
-        grasp_target_5:
-          Value: true
         red_object_target:
           Value: true
         workcell_base_link:
@@ -672,8 +679,6 @@ Visualization Manager:
           grasp_target_3:
             {}
           grasp_target_4:
-            {}
-          grasp_target_5:
             {}
           red_object_target:
             {}
@@ -760,16 +765,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 5.9214677810668945
+      Distance: 5.356081008911133
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0.5
+        X: 0.040779922157526016
+        Y: 0.30248019099235535
+        Z: 0.11754677444696426
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -781,6 +786,8 @@ Visualization Manager:
       Yaw: 0.8449999690055847
     Saved: ~
 Window Geometry:
+  Birobot Mission Control:
+    collapsed: false
   Camera Depth:
     collapsed: false
   Camera RGB:
@@ -794,13 +801,13 @@ Window Geometry:
     collapsed: true
   MotionPlanning - Trajectory Slider:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd0000000200000000000001c70000037dfc0200000003fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000005001000003fc0000004c0000037d0000000000fffffffaffffffff0100000003fb0000000a005600690065007700730000000000ffffffff0000011001000003fb000000100044006900730070006c0061007900730000000000ffffffff0000016a01000003fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e00670000000000000001c7000001c701000003fb0000001200530065006c0065006300740069006f006e00000002f900000079000000790100000300000001000001440000037dfc0200000003fb0000001400430061006d0065007200610020005200470042010000004c000001270000002201000003fb0000001800430061006d0065007200610020004400650070007400680100000174000001240000002201000003fb0000002e0052006500640020004f0062006a00650063007400200032004400200044006500740065006300740069006f006e01000002990000013000000022010000030000027b0000037d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000300000000000001e60000037dfc0200000003fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000005001000003fc0000004c0000037d0000000000fffffffaffffffff0100000003fb0000000a005600690065007700730000000000ffffffff0000011001000003fb000000100044006900730070006c0061007900730000000000ffffffff0000016a01000003fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e00670000000000000001c7000001c701000003fb0000001200530065006c0065006300740069006f006e00000002f900000079000000790100000300000001000001690000037dfc0200000003fb0000001400430061006d0065007200610020005200470042000000004c000001280000002201000003fb0000001800430061006d0065007200610020004400650070007400680000000175000001230000002201000003fb0000002e0052006500640020004f0062006a00650063007400200032004400200044006500740065006300740069006f006e0000000299000001300000002201000003000000020000046200000174fc0100000001fb0000002e004200690072006f0062006f00740020004d0069007300730069006f006e00200043006f006e00740072006f006c02000000130000026a000001e600000174000004620000037d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Red Object 2D Detection:
     collapsed: false
   Selection:
     collapsed: false
   Views:
     collapsed: true
-  Width: 960
+  Width: 1122
   X: 0
   Y: 0

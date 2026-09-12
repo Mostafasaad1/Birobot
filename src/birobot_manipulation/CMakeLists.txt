@@ -100,6 +100,8 @@ ament_target_dependencies(birobot_bt_coordinator_node
   ament_index_cpp
   tf2_ros
   behaviortree_cpp
+  std_srvs
+  birobot_interfaces
 )
 
 # ── BehaviorTree.CPP v4 AutoPick Nodes & Coordinator ──────────────────────────

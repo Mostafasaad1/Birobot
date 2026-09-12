@@ -61,6 +61,11 @@ def generate_launch_description():
             default_value='other_side',
             description='Spawn zone around Arm 1: "other_side" (past table border X in [-1.08, -0.90]), "front" (on table X in [-0.48, -0.15]), or "all"',
         ),
+        DeclareLaunchArgument(
+            'auto_start',
+            default_value='false',
+            description='Auto-start collaborative handover mission immediately on launch (default: false, trigger via RViz panel)',
+        ),
     ]
 
     # 1. Base Gazebo Sim + MoveIt 2 + RViz2 + ros2_control + Drop-off Bin
@@ -133,6 +138,7 @@ def generate_launch_description():
             robot_description_kinematics,
             robot_description_planning,
             {'bt_xml_file': bt_xml_file},
+            {'auto_start': LaunchConfiguration('auto_start')},
             {'use_sim_time': True},
         ],
         condition=IfCondition(launch_bt),

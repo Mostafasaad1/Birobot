@@ -1,0 +1,9 @@
+<library path="birobot_rviz_plugins">
+  <class name="birobot_rviz_plugins/BirobotControlPanel"
+         type="birobot_rviz_plugins::BirobotControlPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Interactive Birobot Control Panel: randomize red object placement and trigger autonomous collaborative pick-and-place missions directly from RViz.
+    </description>
+  </class>
+</library>
