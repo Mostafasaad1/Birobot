@@ -98,7 +98,7 @@ ament_target_dependencies(birobot_bt_coordinator_node
   behaviortree_cpp
 )
 
-# ── BehaviorTree.CPP v4 Auto Pick Nodes & Coordinator ──────────────────────────
+# ── BehaviorTree.CPP v4 AutoPick Nodes & Coordinator ──────────────────────────
 add_library(auto_pick_bt_nodes_lib SHARED
   src/bt_nodes/auto_pick_bt_nodes.cpp
 )
@@ -108,9 +108,7 @@ target_include_directories(auto_pick_bt_nodes_lib PUBLIC
 )
 ament_target_dependencies(auto_pick_bt_nodes_lib
   rclcpp
-  rclcpp_action
   geometry_msgs
-  sensor_msgs
   shape_msgs
   moveit_core
   moveit_ros_planning
@@ -121,14 +119,14 @@ ament_target_dependencies(auto_pick_bt_nodes_lib
   birobot_interfaces
 )
 
-add_executable(auto_pick_coordinator_node
+add_executable(auto_pick_coordinator
   src/auto_pick_coordinator.cpp
 )
-target_link_libraries(auto_pick_coordinator_node
+target_link_libraries(auto_pick_coordinator
   auto_pick_bt_nodes_lib
   handover_bt_nodes_lib
 )
-ament_target_dependencies(auto_pick_coordinator_node
+ament_target_dependencies(auto_pick_coordinator
   rclcpp
   rclcpp_action
   control_msgs
@@ -144,7 +142,7 @@ install(TARGETS
   handover_bt_nodes_lib
   birobot_bt_coordinator_node
   auto_pick_bt_nodes_lib
-  auto_pick_coordinator_node
+  auto_pick_coordinator
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -169,8 +167,8 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_mtc_pipeline rclcpp rclcpp_lifecycle birobot_interfaces)
 
   ament_add_gtest(test_bt_nodes test/test_bt_nodes.cpp)
-  target_link_libraries(test_bt_nodes handover_bt_nodes_lib auto_pick_bt_nodes_lib)
-  ament_target_dependencies(test_bt_nodes rclcpp tf2_ros behaviortree_cpp birobot_interfaces)
+  target_link_libraries(test_bt_nodes handover_bt_nodes_lib)
+  ament_target_dependencies(test_bt_nodes rclcpp tf2_ros behaviortree_cpp)
 endif()
 
 ament_package()

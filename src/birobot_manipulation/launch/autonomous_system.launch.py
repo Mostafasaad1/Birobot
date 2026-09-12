@@ -25,7 +25,7 @@ from launch.actions import (
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
 import yaml
@@ -39,23 +39,17 @@ def generate_launch_description():
 
     launch_bt = LaunchConfiguration('launch_bt')
     launch_perception = LaunchConfiguration('launch_perception')
-    mission = LaunchConfiguration('mission')
 
     declared_arguments = [
         DeclareLaunchArgument(
             'launch_bt',
             default_value='true',
-            description='Launch BehaviorTree.CPP v4 coordinator',
+            description='Launch BehaviorTree.CPP v4 collaborative coordinator',
         ),
         DeclareLaunchArgument(
             'launch_perception',
             default_value='true',
             description='Launch 3D perception pipeline (RANSAC + PCA)',
-        ),
-        DeclareLaunchArgument(
-            'mission',
-            default_value='auto_pick_place',
-            description='Mission to execute: "auto_pick_place" or "collaborative_handover"',
         ),
     ]
 
@@ -110,32 +104,11 @@ def generate_launch_description():
             'robot_description_planning': yaml.safe_load(f)
         }
 
-    # 3. BehaviorTree.CPP v4 Mission Coordinators
-    auto_pick_xml_file = os.path.join(
-        pkg_manipulation, 'config', 'bt_trees', 'auto_pick_place.xml'
-    )
-    auto_pick_coordinator_node = Node(
-        package='birobot_manipulation',
-        executable='auto_pick_coordinator_node',
-        name='auto_pick_coordinator',
-        output='screen',
-        parameters=[
-            robot_description,
-            robot_description_semantic,
-            robot_description_kinematics,
-            robot_description_planning,
-            {'bt_xml_file': auto_pick_xml_file},
-            {'use_sim_time': True},
-        ],
-        condition=IfCondition(
-            PythonExpression(["'", mission, "' == 'auto_pick_place' and '", launch_bt, "' == 'true'"])
-        ),
-    )
-
-    handover_xml_file = os.path.join(
+    # 3. BehaviorTree.CPP v4 Mission Coordinator
+    bt_xml_file = os.path.join(
         pkg_manipulation, 'config', 'bt_trees', 'collaborative_handover.xml'
     )
-    handover_coordinator_node = Node(
+    bt_coordinator_node = Node(
         package='birobot_manipulation',
         executable='birobot_bt_coordinator_node',
         name='birobot_bt_coordinator',
@@ -145,12 +118,10 @@ def generate_launch_description():
             robot_description_semantic,
             robot_description_kinematics,
             robot_description_planning,
-            {'bt_xml_file': handover_xml_file},
+            {'bt_xml_file': bt_xml_file},
             {'use_sim_time': True},
         ],
-        condition=IfCondition(
-            PythonExpression(["'", mission, "' == 'collaborative_handover' and '", launch_bt, "' == 'true'"])
-        ),
+        condition=IfCondition(launch_bt),
     )
 
     # Sequence perception and BT coordinator after simulation stabilization
@@ -158,8 +129,7 @@ def generate_launch_description():
         period=22.0,
         actions=[
             perception_node,
-            auto_pick_coordinator_node,
-            handover_coordinator_node,
+            bt_coordinator_node,
         ],
     )
 
