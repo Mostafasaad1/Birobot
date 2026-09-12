@@ -58,8 +58,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'zone',
-            default_value='all',
-            description='Spawn zone around Arm 1: "all", "other_side" (rear/flanks X < -0.58), or "front" (inbound X > -0.58)',
+            default_value='other_side',
+            description='Spawn zone around Arm 1: "other_side" (past table border X in [-1.08, -0.90]), "front" (on table X in [-0.48, -0.15]), or "all"',
         ),
     ]
 

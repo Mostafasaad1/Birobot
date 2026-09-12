@@ -68,8 +68,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'zone',
-            default_value='all',
-            description='Spawn zone around Arm 1: "all" (full 290 deg workspace), "other_side" (rear/flanks X < -0.58), or "front" (inbound X > -0.58)',
+            default_value='other_side',
+            description='Spawn zone around Arm 1: "other_side" (past table border X in [-1.08, -0.90]), "front" (on table X in [-0.48, -0.15]), or "all"',
         ),
         DeclareLaunchArgument(
             'object_x',
@@ -225,48 +225,51 @@ def generate_launch_description():
 
     def spawn_object_1_factory(context, *args, **kwargs):
         randomize_flag = context.launch_configurations.get('randomize', 'true').lower() in ('true', '1', 'yes')
-        zone = context.launch_configurations.get('zone', 'all').lower()
+        zone = context.launch_configurations.get('zone', 'other_side').lower()
         if randomize_flag:
-            # Polar fan distribution around Arm 1 base (-0.60, 0.0)
-            # Full 290-degree angular spread (-145 deg to +145 deg), R in [0.24, 0.48] m
-            # Covers both front workspace (X > -0.58) and other side / rear flanks (X < -0.58)
             while True:
-                r = random.uniform(0.24, 0.48)
-                theta = random.uniform(-2.53, 2.53)  # +/- 145 deg
-                x_val = -0.60 + r * math.cos(theta)
-                y_val = r * math.sin(theta)
-
-                # Keep clear of arm base pedestal (radius 0.085m + object margin)
-                if math.hypot(x_val - (-0.60), y_val) < 0.22:
-                    continue
-                # Keep clear of obstacle 2 at (-0.10, -0.22)
-                if math.hypot(x_val - (-0.10), y_val - (-0.22)) < 0.16:
-                    continue
-                # Zone filter:
-                # "other_side" forces X < -0.58 (strictly on the rear/flank of Arm 1)
-                # "front" forces X > -0.58 (in front of Arm 1)
-                if zone in ('other_side', 'otherside', 'rear', 'back') and x_val >= -0.58:
-                    continue
-                if zone in ('front', 'infront') and x_val <= -0.58:
-                    continue
-                # Ensure within table bounds (table is [-0.80, 0.80] x [-0.40, 0.40])
-                # Keep object center >= 6cm inside edges:
-                if -0.74 <= x_val <= -0.15 and -0.32 <= y_val <= 0.32:
-                    break
+                if zone in ('other_side', 'otherside', 'rear', 'back'):
+                    # Past table border behind Arm 1:
+                    # Table ends at X = -0.800. Object footprint radius is ~0.085m.
+                    # Center X in [-1.080, -0.900] guarantees object closest edge is <= -0.815m (100% off table).
+                    x_val = random.uniform(-1.080, -0.900)
+                    y_val = random.uniform(-0.250, 0.250)
+                    dist_base = math.hypot(x_val - (-0.60), y_val)
+                    if 0.24 <= dist_base <= 0.52:
+                        break
+                elif zone in ('front', 'infront'):
+                    x_val = random.uniform(-0.480, -0.150)
+                    y_val = random.uniform(-0.280, 0.280)
+                    dist_base = math.hypot(x_val - (-0.60), y_val)
+                    if 0.24 <= dist_base <= 0.52:
+                        break
+                else:  # all
+                    subzone = 'other_side' if random.random() < 0.70 else 'front'
+                    if subzone == 'other_side':
+                        x_val = random.uniform(-1.080, -0.900)
+                        y_val = random.uniform(-0.250, 0.250)
+                    else:
+                        x_val = random.uniform(-0.480, -0.150)
+                        y_val = random.uniform(-0.280, 0.280)
+                    dist_base = math.hypot(x_val - (-0.60), y_val)
+                    if 0.24 <= dist_base <= 0.52:
+                        break
 
             spawn_x = str(round(x_val, 3))
             spawn_y = str(round(y_val, 3))
-            spawn_z = '0.15'
+            # Table top is at Z=0.05m (spawns at Z=0.15m). Past table border is ground at Z=0.00m (spawns at Z=0.10m)
+            is_on_table = (-0.80 <= float(spawn_x) <= 0.80) and (-0.40 <= float(spawn_y) <= 0.40)
+            spawn_z = '0.15' if is_on_table else '0.10'
             spawn_yaw = str(round(random.uniform(-1.5708, 1.5708), 3))
             dist_base = round(math.hypot(float(spawn_x) - (-0.60), float(spawn_y)), 3)
             angle_base = round(math.degrees(math.atan2(float(spawn_y), float(spawn_x) - (-0.60))), 1)
-            side_label = "OTHER SIDE (rear/flank)" if float(spawn_x) < -0.58 else "FRONT (inbound)"
+            side_label = "OTHER SIDE (PAST TABLE BORDER)" if not is_on_table else "FRONT (on table)"
             print(
                 f"\n=======================================================\n"
                 f"[GAZEBO RANDOM SPAWN] Spawned irregular_object_1 in Arm 1 workspace ({side_label}):\n"
                 f"  X     = {spawn_x} m\n"
                 f"  Y     = {spawn_y} m\n"
-                f"  Z     = {spawn_z} m\n"
+                f"  Z     = {spawn_z} m ({'ON TABLE' if is_on_table else 'GROUND (PAST TABLE BORDER)'})\n"
                 f"  Yaw   = {spawn_yaw} rad ({math.degrees(float(spawn_yaw)):.1f} deg)\n"
                 f"  Dist  = {dist_base} m from Arm 1 base\n"
                 f"  Angle = {angle_base} deg relative to Arm 1\n"

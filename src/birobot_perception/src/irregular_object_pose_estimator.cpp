@@ -52,10 +52,10 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   min_valid_points_ = declare_parameter<int>("min_valid_points", 100);
 
   // Workspace Bounding Box Parameters (crops out overhead robot arms, floor, outside tables)
-  workspace_min_x_ = declare_parameter<double>("workspace_min_x", -0.76);
+  workspace_min_x_ = declare_parameter<double>("workspace_min_x", -1.25);
   workspace_max_x_ = declare_parameter<double>("workspace_max_x", 0.45);
-  workspace_min_y_ = declare_parameter<double>("workspace_min_y", -0.35);
-  workspace_max_y_ = declare_parameter<double>("workspace_max_y", 0.35);
+  workspace_min_y_ = declare_parameter<double>("workspace_min_y", -0.60);
+  workspace_max_y_ = declare_parameter<double>("workspace_max_y", 0.60);
   workspace_min_z_ = declare_parameter<double>("workspace_min_z", -0.05);
   workspace_max_z_ = declare_parameter<double>("workspace_max_z", 0.35);
 
@@ -169,33 +169,65 @@ bool IrregularObjectPoseEstimator::segment_table_plane(
     return false;
   }
 
-  pcl::SACSegmentation<pcl::PointXYZ> seg;
-  pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-  pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr current_cloud(new pcl::PointCloud<pcl::PointXYZ>(*input_cloud));
+  size_t total_inliers = 0;
 
-  seg.setOptimizeCoefficients(true);
-  seg.setModelType(pcl::SACMODEL_PLANE);
-  seg.setMethodType(pcl::SAC_RANSAC);
-  seg.setMaxIterations(ransac_max_iterations_);
-  seg.setDistanceThreshold(ransac_distance_threshold_);
+  // Segment and remove up to 2 dominant horizontal supporting planes (table at z~0.05 and ground at z~0.00)
+  for (int iter = 0; iter < 2; ++iter) {
+    if (current_cloud->size() < 100) {
+      break;
+    }
 
-  seg.setInputCloud(input_cloud);
-  seg.segment(*inliers, *coefficients);
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
 
-  if (inliers->indices.empty()) {
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(ransac_max_iterations_);
+    seg.setDistanceThreshold(ransac_distance_threshold_);
+
+    seg.setInputCloud(current_cloud);
+    seg.segment(*inliers, *coefficients);
+
+    if (inliers->indices.empty()) {
+      break;
+    }
+
+    // A valid supporting plane must have at least 15% of current cloud or >= 300 points
+    size_t min_plane_pts = std::min(static_cast<size_t>(300), static_cast<size_t>(current_cloud->size() * 0.15));
+    if (inliers->indices.size() < min_plane_pts) {
+      break;
+    }
+
+    // Must be roughly horizontal (|nz| >= 0.80)
+    if (coefficients->values.size() >= 3) {
+      double nz = std::abs(coefficients->values[2]);
+      if (nz < 0.80) {
+        break;
+      }
+    }
+
+    total_inliers += inliers->indices.size();
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr remaining(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(current_cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*remaining);
+    current_cloud = remaining;
+  }
+
+  if (total_inliers == 0) {
     inlier_pct = 0.0;
     *non_table_cloud = *input_cloud;
     return false;
   }
 
-  inlier_pct = (static_cast<double>(inliers->indices.size()) / input_cloud->size()) * 100.0;
-
-  pcl::ExtractIndices<pcl::PointXYZ> extract;
-  extract.setInputCloud(input_cloud);
-  extract.setIndices(inliers);
-  extract.setNegative(true);
-  extract.filter(*non_table_cloud);
-
+  *non_table_cloud = *current_cloud;
+  inlier_pct = (static_cast<double>(total_inliers) / input_cloud->size()) * 100.0;
   return true;
 }
 

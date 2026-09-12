@@ -17,11 +17,11 @@ birobot_perception_node:
     target_tf_prefix: "grasp_target_"
     diagnostic_rate_hz: 1.0
     min_valid_points: 100
-    # Workspace bounding box: covers entire table including other side of Arm 1 (X down to -0.76m)
-    workspace_min_x: -0.76
+    # Workspace bounding box: covers full Arm 1 workspace including past table border (X down to -1.25m, Y up to +/-0.60m)
+    workspace_min_x: -1.25
     workspace_max_x: 0.45
-    workspace_min_y: -0.35
-    workspace_max_y: 0.35
+    workspace_min_y: -0.60
+    workspace_max_y: 0.60
     workspace_min_z: -0.05
     workspace_max_z: 0.35
     input_rgb_image_topic: "/birobot/depth_camera/image"
