@@ -81,10 +81,10 @@
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
     <group_state name="drop_off" group="arm_2">
-        <joint name="arm2_shoulder_pan_joint" value="0.1221"/>
-        <joint name="arm2_shoulder_lift_joint" value="-2.3566"/>
-        <joint name="arm2_elbow_joint" value="2.7089"/>
-        <joint name="arm2_wrist_1_joint" value="-1.9231"/>
+        <joint name="arm2_shoulder_pan_joint" value="0.1222"/>
+        <joint name="arm2_shoulder_lift_joint" value="-2.4033"/>
+        <joint name="arm2_elbow_joint" value="2.6355"/>
+        <joint name="arm2_wrist_1_joint" value="-1.8030"/>
         <joint name="arm2_wrist_2_joint" value="-1.5708"/>
         <joint name="arm2_wrist_3_joint" value="0.0"/>
     </group_state>
