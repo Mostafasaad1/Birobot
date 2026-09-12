@@ -51,13 +51,19 @@ def generate_launch_description():
             default_value='true',
             description='Launch 3D perception pipeline (RANSAC + PCA)',
         ),
+        DeclareLaunchArgument(
+            'randomize',
+            default_value='true',
+            description='Randomize red object spawn pose in Gazebo',
+        ),
     ]
 
     # 1. Base Gazebo Sim + MoveIt 2 + RViz2 + ros2_control + Drop-off Bin
     gazebo_moveit = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_moveit, 'launch', 'gazebo.launch.py')
-        )
+            os.path.join(pkg_moveit, 'launch', 'gazebo_random.launch.py')
+        ),
+        launch_arguments={'randomize': LaunchConfiguration('randomize')}.items(),
     )
 
     # 2. 3D Perception Managed Lifecycle Node

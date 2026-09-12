@@ -14,6 +14,8 @@
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
 
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
@@ -52,6 +54,7 @@ IrregularObjectPoseEstimator::on_configure(const rclcpp_lifecycle::State & /*sta
   pub_diagnostics_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("/diagnostics", 10);
   pub_object_cloud_ = create_publisher<sensor_msgs::msg::PointCloud2>("/birobot/perception/object_cloud", 5);
   pub_target_poses_ = create_publisher<geometry_msgs::msg::PoseArray>("/birobot/perception/target_poses", 10);
+  pub_target_markers_ = create_publisher<visualization_msgs::msg::MarkerArray>("/birobot/perception/target_markers", 10);
 
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
@@ -69,6 +72,7 @@ IrregularObjectPoseEstimator::on_activate(const rclcpp_lifecycle::State & /*stat
   pub_diagnostics_->on_activate();
   pub_object_cloud_->on_activate();
   pub_target_poses_->on_activate();
+  pub_target_markers_->on_activate();
 
   sub_pointcloud_ = create_subscription<sensor_msgs::msg::PointCloud2>(
     input_cloud_topic_, rclcpp::SensorDataQoS(),
@@ -94,6 +98,7 @@ IrregularObjectPoseEstimator::on_deactivate(const rclcpp_lifecycle::State & /*st
   pub_diagnostics_->on_deactivate();
   pub_object_cloud_->on_deactivate();
   pub_target_poses_->on_deactivate();
+  pub_target_markers_->on_deactivate();
 
   RCLCPP_INFO(get_logger(), "Deactivation successful.");
   return CallbackReturn::SUCCESS;
@@ -107,6 +112,7 @@ IrregularObjectPoseEstimator::on_cleanup(const rclcpp_lifecycle::State & /*state
   pub_diagnostics_.reset();
   pub_object_cloud_.reset();
   pub_target_poses_.reset();
+  pub_target_markers_.reset();
   tf_broadcaster_.reset();
   tf_listener_.reset();
   tf_buffer_.reset();
@@ -319,6 +325,7 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
   pose_array.header.stamp = msg->header.stamp;
   pose_array.header.frame_id = target_frame_;
 
+  visualization_msgs::msg::MarkerArray marker_array;
   pcl::PointCloud<pcl::PointXYZ> combined_object_cloud;
 
   for (size_t i = 0; i < clusters.size(); ++i) {
@@ -339,12 +346,109 @@ void IrregularObjectPoseEstimator::pointcloud_callback(
       tf_msg.transform.rotation = target_pose.orientation;
 
       tf_broadcaster_->sendTransform(tf_msg);
+
+      // Compute Euler angles (Roll, Pitch, Yaw)
+      tf2::Quaternion q(
+        target_pose.orientation.x,
+        target_pose.orientation.y,
+        target_pose.orientation.z,
+        target_pose.orientation.w);
+      tf2::Matrix3x3 m(q);
+      double roll, pitch, yaw;
+      m.getRPY(roll, pitch, yaw);
+
+      // Distinct console log of dynamic perception solution
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1500,
+        "==> [PERCEPTION SOLVED] Obj %zu: Pos=[X: %+.3f, Y: %+.3f, Z: %+.3f] m | "
+        "Yaw=%+.1f deg (%+.3f rad) | ClusterPoints=%zu",
+        i + 1,
+        target_pose.position.x, target_pose.position.y, target_pose.position.z,
+        yaw * 180.0 / M_PI, yaw, clusters[i]->size());
+
+      // 1. Centroid Sphere Marker
+      visualization_msgs::msg::Marker sphere_marker;
+      sphere_marker.header.stamp = msg->header.stamp;
+      sphere_marker.header.frame_id = target_frame_;
+      sphere_marker.ns = "object_centroids";
+      sphere_marker.id = static_cast<int>(i);
+      sphere_marker.type = visualization_msgs::msg::Marker::SPHERE;
+      sphere_marker.action = visualization_msgs::msg::Marker::ADD;
+      sphere_marker.pose = target_pose;
+      sphere_marker.scale.x = 0.04;
+      sphere_marker.scale.y = 0.04;
+      sphere_marker.scale.z = 0.04;
+      if (i == 0) {
+        sphere_marker.color.r = 1.0f;
+        sphere_marker.color.g = 0.1f;
+        sphere_marker.color.b = 0.1f;
+        sphere_marker.color.a = 0.9f;
+      } else {
+        sphere_marker.color.r = 0.1f;
+        sphere_marker.color.g = 0.4f;
+        sphere_marker.color.b = 1.0f;
+        sphere_marker.color.a = 0.9f;
+      }
+      sphere_marker.lifetime = rclcpp::Duration::from_seconds(1.0);
+      marker_array.markers.push_back(sphere_marker);
+
+      // 2. Grasp Approach Arrow Marker
+      visualization_msgs::msg::Marker arrow_marker;
+      arrow_marker.header.stamp = msg->header.stamp;
+      arrow_marker.header.frame_id = target_frame_;
+      arrow_marker.ns = "grasp_axes";
+      arrow_marker.id = static_cast<int>(i);
+      arrow_marker.type = visualization_msgs::msg::Marker::ARROW;
+      arrow_marker.action = visualization_msgs::msg::Marker::ADD;
+      arrow_marker.pose = target_pose;
+      arrow_marker.scale.x = 0.12;  // shaft length
+      arrow_marker.scale.y = 0.015; // shaft diameter
+      arrow_marker.scale.z = 0.015; // head diameter
+      arrow_marker.color.r = 1.0f;
+      arrow_marker.color.g = 0.85f;
+      arrow_marker.color.b = 0.0f;
+      arrow_marker.color.a = 0.95f;
+      arrow_marker.lifetime = rclcpp::Duration::from_seconds(1.0);
+      marker_array.markers.push_back(arrow_marker);
+
+      // 3. 3D Text Billboard Marker above object
+      visualization_msgs::msg::Marker text_marker;
+      text_marker.header.stamp = msg->header.stamp;
+      text_marker.header.frame_id = target_frame_;
+      text_marker.ns = "object_labels";
+      text_marker.id = static_cast<int>(i);
+      text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      text_marker.action = visualization_msgs::msg::Marker::ADD;
+      text_marker.pose.position.x = target_pose.position.x;
+      text_marker.pose.position.y = target_pose.position.y;
+      text_marker.pose.position.z = target_pose.position.z + 0.12;
+      text_marker.pose.orientation.w = 1.0;
+      text_marker.scale.z = 0.035;
+      text_marker.color.r = 1.0f;
+      text_marker.color.g = 1.0f;
+      text_marker.color.b = 1.0f;
+      text_marker.color.a = 1.0f;
+
+      char label_buf[128];
+      std::snprintf(
+        label_buf, sizeof(label_buf),
+        "Obj %zu: [%.2f, %.2f, %.2f]\nYaw: %+.1f deg",
+        i + 1,
+        target_pose.position.x, target_pose.position.y, target_pose.position.z,
+        yaw * 180.0 / M_PI);
+      text_marker.text = label_buf;
+      text_marker.lifetime = rclcpp::Duration::from_seconds(1.0);
+      marker_array.markers.push_back(text_marker);
     }
     combined_object_cloud += *clusters[i];
   }
 
   if (pub_target_poses_ && pub_target_poses_->is_activated()) {
     pub_target_poses_->publish(pose_array);
+  }
+
+  if (pub_target_markers_ && pub_target_markers_->is_activated()) {
+    pub_target_markers_->publish(marker_array);
   }
 
   if (pub_object_cloud_ && pub_object_cloud_->is_activated()) {

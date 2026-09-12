@@ -10,6 +10,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -39,6 +40,7 @@ ament_target_dependencies(irregular_object_pose_estimator_lib
   rclcpp_lifecycle
   sensor_msgs
   geometry_msgs
+  visualization_msgs
   diagnostic_msgs
   lifecycle_msgs
   tf2_ros
@@ -73,6 +75,11 @@ install(DIRECTORY include/
 
 install(DIRECTORY config launch
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/monitor_pick_points.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # Testing
