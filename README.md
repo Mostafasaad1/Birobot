@@ -106,7 +106,7 @@ The system autonomously detects, grasps, transfers, and deposits payloads across
 
 ## Collaborative Handover Pipeline
 
-The system executes an autonomous 13-stage collaborative workflow defined in [`collaborative_handover.xml`](file:///home/mox/projects/Birobot/src/birobot_manipulation/config/bt_trees/collaborative_handover.xml):
+The system executes an autonomous 13-stage collaborative workflow defined in [`collaborative_handover.xml`](src/birobot_manipulation/config/bt_trees/collaborative_handover.xml):
 
 ```mermaid
 sequenceDiagram
@@ -154,7 +154,7 @@ sequenceDiagram
 
 ## MoveIt-Styled RViz2 Control Panel
 
-The [`birobot_rviz_plugins`](file:///home/mox/projects/Birobot/src/birobot_rviz_plugins) package provides **`BirobotControlPanel`**, a native `rviz_common::Panel` plugin engineered to strictly match MoveIt's **`MotionPlanning`** design language.
+The [`birobot_rviz_plugins`](src/birobot_rviz_plugins) package provides **`BirobotControlPanel`**, a native `rviz_common::Panel` plugin engineered to strictly match MoveIt's **`MotionPlanning`** design language.
 
 ![MoveIt Reference vs Birobot Control Panel](docs/images/moveit_design_comparison.png)
 
@@ -488,7 +488,7 @@ colcon test-result --all --verbose
 ## Configuration Reference
 
 ### Perception Tuning (`perception_params.yaml`)
-Located at [`src/birobot_perception/config/perception_params.yaml`](file:///home/mox/projects/Birobot/src/birobot_perception/config/perception_params.yaml):
+Located at [`src/birobot_perception/config/perception_params.yaml`](src/birobot_perception/config/perception_params.yaml):
 
 ```yaml
 birobot_perception_node:
@@ -502,7 +502,7 @@ birobot_perception_node:
 ```
 
 ### Behavior Tree Definition (`collaborative_handover.xml`)
-Located at [`src/birobot_manipulation/config/bt_trees/collaborative_handover.xml`](file:///home/mox/projects/Birobot/src/birobot_manipulation/config/bt_trees/collaborative_handover.xml). Modify stage parameters, Cartesian retract distances, or add conditional branches to expand task behaviors.
+Located at [`src/birobot_manipulation/config/bt_trees/collaborative_handover.xml`](src/birobot_manipulation/config/bt_trees/collaborative_handover.xml). Modify stage parameters, Cartesian retract distances, or add conditional branches to expand task behaviors.
 
 ---
 
@@ -545,7 +545,7 @@ Located at [`src/birobot_manipulation/config/bt_trees/collaborative_handover.xml
 
 ```bibtex
 @software{birobot2026,
-  author = {Mox},
+  author = {Mostafa Saad},
   title = {Birobot: Autonomous Dual-Arm Collaborative Robotic Manipulation System},
   year = {2026},
   publisher = {GitHub},
